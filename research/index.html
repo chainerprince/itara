@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Gateway: Meta Global AI Developer Hackathon plan (26 Oct – 4 Nov 2026)</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #898781;
+  --border: rgba(11,11,11,0.10); --accent: #2a78d6; --accent-wash: #e9f1fc;
+  --good: #006300; --warn: #9a6a00; --bad: #b02e2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220;
+    --text: #ffffff; --text-2: #c3c2b7; --muted: #898781;
+    --border: rgba(255,255,255,0.10); --accent: #3987e5; --accent-wash: #16263b;
+    --good: #2fbf2f; --warn: #fab219; --bad: #ec6a6a;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 56px; }
+body { margin: 0; background: var(--page); color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2);
+  padding: 1px 5px; border-radius: 4px; }
+pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2);
+  padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0; }
+nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--page) 90%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); }
+nav .in { max-width: 1040px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 16px;
+  flex-wrap: wrap; font-size: 14px; }
+nav b { margin-right: auto; }
+main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 21px; margin: 0 0 6px; }
+h3 { font-size: 16px; margin: 22px 0 8px; }
+section { padding-top: 36px; margin-top: 36px; border-top: 1px solid var(--border); }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
+.lede { color: var(--text-2); max-width: 780px; margin: 0 0 14px; }
+.north { background: var(--accent-wash); border-left: 4px solid var(--accent); border-radius: 8px;
+  padding: 16px 20px; font-size: 18px; line-height: 1.45; margin: 20px 0 0; }
+.north small { display: block; font-size: 13px; color: var(--text-2); margin-top: 8px; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card h4 { margin: 0 0 4px; font-size: 14px; }
+.card p, .card ul, .card ol { margin: 0; color: var(--text-2); font-size: 14px; }
+.card ul, .card ol { padding-left: 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+th { background: var(--surface-2); font-weight: 600; font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+td.nw { white-space: nowrap; }
+.muted { color: var(--muted); }
+.good { color: var(--good); font-weight: 600; }
+.warn { color: var(--warn); font-weight: 600; }
+.bad { color: var(--bad); font-weight: 600; }
+.quote { border-left: 3px solid var(--border); padding: 4px 0 4px 14px; color: var(--text-2); margin: 10px 0; }
+footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+footer ul { padding-left: 18px; }
+</style>
+</head>
+<body>
+<nav><div class="in">
+  <b>🧠 Memory Gateway</b>
+  <a href="#arch">Architecture</a>
+  <a href="#why-meta">Why Meta models</a>
+  <a href="#security">Security</a>
+  <a href="#eval">Evaluation</a>
+  <a href="#budget">Budget</a>
+  <a href="#disclosure">Disclosure</a>
+  <a href="#plan">9-day plan</a>
+  <a href="#deliverables">Deliverables</a>
+  <a href="#papers">Papers &amp; tools</a>
+</div></nav>
+
+<main>
+<div class="eyebrow">Meta Global AI Developer Hackathon · 26 Oct – 4 Nov 2026 · Indie track · Theme 2, “Push the Frontier”</div>
+<h1>A self-hosted Llama gateway with shared team memory</h1>
+<p class="lede">A small open Llama model sits between a team and an expensive closed model (Muse Spark). It answers what it can, escalates only what it must, and shares memory and processed context across the whole team, so each piece of the company's knowledge is paid for once, not once per person. Submission due <b>Wed 4 Nov, 9:00 PM ET</b>.</p>
+
+<div class="north">
+  <b>North star:</b> “For a team sharing one codebase, the gateway matches the accuracy of sending context straight to the closed model while sending ≤10% of the closed-model tokens. It knows when not to escalate, and the shared cache cuts gateway GPU time per user as the team grows.”
+  <small>Spin-off of <code>ai-os</code>. The original single-user north star (a learned MMU on LongMemEval and LoCoMo) stays in that repo for its own paper; this project shares the idea of a cheap learned decision, applied to escalation.</small>
+</div>
+
+<section id="arch">
+<div class="eyebrow">01 · Architecture</div>
+<h2>Every layer removes one cost</h2>
+<pre>any app / chat UI / coding agent
+        │  OpenAI-compatible API · user + team identity in headers
+        ▼
+┌─────────────────────── Memory Gateway (self-hosted) ───────────────────────┐
+│  Llama gateway (vLLM) ── shared KV cache (LMCache, permission-scoped keys) │
+│        │ escalates only when needed                                        │
+│        ▼                                                                   │
+│  shared text memory + permissions (Postgres + pgvector, row-level security)│
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       ▼
+                       Muse Spark (closed, expensive)</pre>
+<h3>What each layer saves</h3>
+<table>
+<tr><th style="width:24%">Layer</th><th style="width:22%">Runs on</th><th>Cost it removes</th></tr>
+<tr><td><b>Gateway</b> (Llama 8B Instruct)</td><td>Your GPU (Modal)</td><td><b>Closed-model calls.</b> Answers easy turns itself; escalates hard ones.</td></tr>
+<tr><td><b>Shared text memory</b></td><td>Postgres + pgvector</td><td><b>Closed-model tokens.</b> Escalations carry a compact shared summary instead of raw files or history.</td></tr>
+<tr><td><b>Shared KV cache</b></td><td>vLLM + LMCache</td><td><b>Gateway GPU time and latency.</b> Content one person's request already processed is loaded, not recomputed, for everyone with the same access.</td></tr>
+<tr><td><b>Permissions</b></td><td>Postgres RLS + scoped cache keys</td><td><b>Leaks between people.</b> You only reach memory and cache you're allowed to read.</td></tr>
+</table>
+
+<h3>The decision on every turn (the learned gate)</h3>
+<table>
+<tr><th style="width:34%">Action</th><th>When</th></tr>
+<tr><td>1 · Answer locally</td><td>Self-contained, easy turns.</td></tr>
+<tr><td>2 · Answer locally with memory</td><td>Needs team context, but not hard reasoning. The shared KV cache makes this fast.</td></tr>
+<tr><td>3 · Escalate to Muse with compact memory</td><td>Hard reasoning; Muse gets the summaries, not raw content.</td></tr>
+<tr><td>4 · Escalate to Muse with raw context</td><td>Rare: when exact details matter (code, numbers).</td></tr>
+</table>
+<p class="lede" style="margin-top:10px">Labels come from <b>escalation regret</b>: run each question through the cheap and the expensive paths, and label a turn “needs escalation” when only the expensive path gets it right. Choose the threshold to minimise <code>errors + λ · cost</code>; sweeping λ draws the cost/accuracy curve. Requests that contain tool calls always pass straight to Muse unchanged in the hackathon version.</p>
+</section>
+
+<section id="why-meta">
+<div class="eyebrow">02 · Why Meta models</div>
+<h2>Open weights are a requirement, not a preference</h2>
+<div class="grid">
+  <div class="card"><h4>1 · Closed APIs can't share attention state</h4><p>A shared KV cache needs control of the model's internal state. No closed API exposes it. The cached read path has to be open weights, so it's Llama.</p></div>
+  <div class="card"><h4>2 · A shared cache standardises a company on one model</h4><p>A cache only works with the model that produced it. Every company that adopts a shared cache standardises on one family. This makes Llama infrastructure, not just a model choice.</p></div>
+  <div class="card"><h4>3 · Open and closed split by what each does best</h4><p>Llama handles the high-volume, repeated reading through the shared cache. Muse Spark handles the planning and reasoning where caching doesn't help.</p></div>
+</div>
+<p class="muted" style="font-size:13px;margin-top:10px">Don't claim “only Meta models can do this”: Qwen or Mistral would also work technically. Claim “requires open weights; built and measured on Llama”.</p>
+</section>
+
+<section id="security">
+<div class="eyebrow">03 · Security</div>
+<h2>Postgres handles who-can-read-what; the cache keys handle the timing leak</h2>
+<table>
+<tr><th style="width:30%">Threat</th><th>Mitigation</th></tr>
+<tr><td>Reading another team's memory</td><td>Postgres row-level security on every memory row, keyed by team and user.</td></tr>
+<tr><td>Inferring cached content from response timing (shown in published attacks)</td><td>Include the permission scope in every cache key, so hits only occur between people with the same access. Postgres stores which entries belong to which scope.</td></tr>
+<tr><td>Private conversations leaking into shared memory</td><td>Personal conversation memory is private by default. Only shared knowledge (codebase, docs, team decisions) goes into the team scope.</td></tr>
+<tr><td>Cache files on disk</td><td>Treat them as sensitive as the source code they were computed from.</td></tr>
+</table>
+</section>
+
+<section id="eval">
+<div class="eyebrow">04 · Evaluation</div>
+<h2>Two measurements, both objective where possible</h2>
+<div class="grid">
+  <div class="card"><h4>A · Accuracy vs. closed-model tokens</h4>
+    <ul>
+      <li><b>Code:</b> SWE-bench Lite issue localisation. Given the issue, name the files to change; the gold answer is the files in the real patch. No LLM judge needed.</li>
+      <li><b>Conversation:</b> LoCoMo subset (LLM judge; spot-check 50 by hand).</li>
+      <li><b>Pass:</b> within 3 points of Muse-direct at ≤10% of Muse tokens.</li>
+    </ul></div>
+  <div class="card"><h4>B · Team scaling</h4>
+    <ul>
+      <li>Treat SWE-bench tasks on the same repo (e.g. Django) as different engineers.</li>
+      <li>Replay them with 1, 2, 4, 8, 16 simulated users.</li>
+      <li>Plot gateway GPU-seconds and Muse tokens <i>per user</i> against team size. Sharing works if the curve falls.</li>
+      <li>Tasks span different commits, so cache invalidation gets tested for free.</li>
+    </ul></div>
+</div>
+<h3>Baselines (same questions, same models)</h3>
+<table>
+<tr><th style="width:34%">Baseline</th><th>What it tests</th></tr>
+<tr><td>Muse-direct</td><td>Accuracy ceiling: Muse with the raw retrieved context, no gateway.</td></tr>
+<tr><td>Llama-only</td><td>The floor: never escalate.</td></tr>
+<tr><td>Gateway + rule-based escalation</td><td>Is learning the gate worth it?</td></tr>
+<tr><td>Gateway, no sharing</td><td>Isolates the team-sharing gain.</td></tr>
+<tr><td><b>Full gateway</b> (learned gate + shared memory + shared cache)</td><td>The contribution.</td></tr>
+</table>
+</section>
+
+<section id="budget">
+<div class="eyebrow">05 · Budget</div>
+<h2>$100 Modal GPU + $150 Meta AI credit</h2>
+<div class="grid">
+  <div class="card"><h4>Modal ($100)</h4><ul>
+    <li>Dev: ~20 h on A10 / L4 (~$1.10 / ~$0.80 per h) ≈ $20</li>
+    <li>Experiments: ~20 h on L40S 48 GB (~$1.95/h) ≈ $40</li>
+    <li>Demo + buffer: ~10 h L40S ≈ $20 · spare ≈ $20</li>
+    <li>Scale to zero; weights on a Modal Volume; batch jobs only; nothing left running overnight.</li>
+  </ul><p class="muted" style="margin-top:6px">Rates from third-party listings; confirm on Modal's pricing page.</p></div>
+  <div class="card"><h4>Meta AI ($150)</h4><ul>
+    <li>The expensive run is Muse-direct.</li>
+    <li><code>cost ≈ questions × tokens/question × price per 1M tokens</code></li>
+    <li>Size the evaluation to ~$100; keep ~$50 for dev and demo.</li>
+    <li>Hard spending cap enforced in code from exact token counts.</li>
+  </ul></div>
+  <div class="card"><h4>Postgres ($0)</h4><ul>
+    <li>Docker locally for development.</li>
+    <li>Neon free tier for the deployed demo (reachable from Modal).</li>
+    <li>Only benchmark and synthetic data, never real company code.</li>
+  </ul></div>
+</div>
+</section>
+
+<section id="disclosure">
+<div class="eyebrow">06 · Hackathon disclosure</div>
+<h2>A new repo makes the line clean</h2>
+<p class="lede"><b>Commit 1</b> imports the reused pieces from <code>ai-os@5967f9b</code> (3 Jun 2026), with exactly that message. <b>Every later commit</b> is hackathon work. <code>DISCLOSURE.md</code> repeats this table and links the diff from commit 1 to the final commit.</p>
+<table>
+<tr><th style="width:50%">Pre-existing (imported in commit 1)</th><th>Built in the window (26 Oct – 4 Nov 2026)</th></tr>
+<tr><td><ul style="margin:0;padding-left:18px">
+  <li>Data models (<code>models.py</code>) from <code>ai-os</code></li>
+  <li>Compression logic from the <code>ai-os</code> daemon</li>
+  <li>Rich monitor, as the dashboard starting point</li>
+  <li>Prior research review (in the <code>ai-os</code> repo)</li>
+</ul></td><td><ul style="margin:0;padding-left:18px">
+  <li>Llama gateway on vLLM (Modal) and Muse Spark escalation</li>
+  <li>OpenAI-compatible gateway server</li>
+  <li>Postgres + pgvector shared memory with row-level security</li>
+  <li>Shared KV cache with permission-scoped keys</li>
+  <li>Learned escalation gate</li>
+  <li>Eval harness, team replay, results, write-up, demo</li>
+</ul></td></tr>
+</table>
+<p class="muted" style="font-size:13px;margin-top:8px">The Official Rules weren't linked on the event page when checked. Confirm the pre-existing-work wording before submitting.</p>
+</section>
+
+<section id="plan">
+<div class="eyebrow">07 · 9-day plan</div>
+<h2>Feature freeze Mon 2 Nov</h2>
+<table>
+<tr><th>Day</th><th>Build</th><th>Done when</th></tr>
+<tr><td class="nw">Mon 26 Oct</td><td>Init repo + import commit + <code>DISCLOSURE.md</code>; read the rules. <code>modal token new</code>; Llama 8B on vLLM on Modal; Muse API hello-world; look up the Muse price and size the eval.</td><td>Both models answer from one script.</td></tr>
+<tr><td class="nw">Tue 27 Oct</td><td>Postgres + pgvector schema with row-level security; shared text memory (summaries + raw pages); exact token accounting and spend cap.</td><td>Two users see only what their scope allows.</td></tr>
+<tr><td class="nw">Wed 28 Oct</td><td>Gateway server (OpenAI-compatible), escalation to Muse with compact memory, tool-call passthrough.</td><td>A chat client works against the gateway URL.</td></tr>
+<tr><td class="nw">Thu 29 Oct</td><td>Shared KV cache: vLLM + LMCache with permission-scoped keys. <b>Fallback:</b> vLLM prefix caching shared on one server.</td><td>A second user's repeat request is measurably faster.</td></tr>
+<tr><td class="nw">Fri 30 Oct</td><td>Eval harness: SWE-bench Lite localisation + LoCoMo subset; team replay simulator.</td><td>One command runs any baseline on 20 items.</td></tr>
+<tr><td class="nw">Sat 31 Oct</td><td>Run baselines: Muse-direct, Llama-only, rule gate, no-sharing.</td><td>First results table.</td></tr>
+<tr><td class="nw">Sun 1 Nov</td><td>Learned gate (4 actions), λ sweep, team-scaling curve.</td><td>Numbers frozen; north star marked pass or fail, honestly.</td></tr>
+<tr><td class="nw">Mon 2 Nov</td><td><b>Feature freeze.</b> Dashboard (company tokens + GPU-seconds saved), deploy on Modal, README.</td><td>Demo runs from a clean checkout.</td></tr>
+<tr><td class="nw">Tue 3 Nov</td><td>Write-up (4-page workshop format) + 3-minute video.</td><td>Draft and video complete.</td></tr>
+<tr><td class="nw">Wed 4 Nov</td><td>Buffer. Submit by noon ET; hard deadline 9:00 PM ET.</td><td>Submitted.</td></tr>
+</table>
+<p class="muted" style="font-size:13px;margin-top:8px">If the shared KV cache isn't working by Fri 30 Oct, ship with prefix caching and report the KV result as future work. The gateway + shared text memory result stands on its own.</p>
+</section>
+
+<section id="deliverables">
+<div class="eyebrow">08 · Deliverables</div>
+<h2>A gateway, not a harness</h2>
+<p class="lede">A harness runs a model with tools (Claude Code, Cursor). A gateway sits between any harness and the models, so it works with every harness instead of competing with them.</p>
+<div class="grid">
+  <div class="card"><h4>Repo</h4>
+<pre>gateway/
+  server.py        # OpenAI-compatible API
+  gate.py          # learned 4-way decision
+  llama.py muse.py # model clients
+memory/
+  store.py         # Postgres + pgvector, RLS
+  compress.py      # from ai-os (commit 1)
+cache/
+  lmcache.py       # scoped KV keys
+modal_app.py       # vLLM on Modal
+eval/
+  swebench_loc.py locomo.py replay.py
+dashboard/  DISCLOSURE.md  README.md  paper/</pre></div>
+  <div class="card"><h4>What gets submitted</h4><ol>
+    <li><b>Gateway server</b> on Modal: point any app's base URL at it.</li>
+    <li><b>Python SDK</b> for embedding it directly.</li>
+    <li><b>Dashboard</b>: closed-model tokens saved, GPU-seconds saved, escalation rate, company-wide.</li>
+    <li><b>Eval harness + results</b>, and the write-up.</li>
+  </ol>
+  <p style="margin-top:8px"><b>After the hackathon:</b> MCP server for coding agents, Docker Compose for self-hosting, SQLite single-user mode.</p></div>
+  <div class="card"><h4>Write-up outline</h4><ol>
+    <li>Problem: teams pay for the same context over and over.</li>
+    <li>System: gateway, shared memory, shared cache, permissions.</li>
+    <li>Gate: escalation regret, cost-aware threshold.</li>
+    <li>Results: accuracy vs. tokens; per-user cost vs. team size.</li>
+    <li>Limits: simulated teams, one model family, LLM judge on LoCoMo.</li>
+  </ol></div>
+</div>
+</section>
+
+<section id="papers">
+<div class="eyebrow">09 · Papers &amp; tools</div>
+<h2>What this rests on</h2>
+<p class="lede">✓ = confirmed in web searches on 26 Oct 2026. ◦ = from memory; check before citing.</p>
+<table>
+<tr><th style="width:30%">Paper</th><th>Key point</th><th style="width:26%">Use here</th></tr>
+<tr><td><a href="https://www.trychroma.com/research/context-rot">Context Rot</a> ✓<br><span class="muted">Chroma, 2025</span></td><td>Quality drops as input grows; a focused ~300-token prompt beat the full ~113K on LongMemEval.</td><td>Why compact memory can be <i>more</i> accurate.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2406.18665">RouteLLM</a> ◦<br><span class="muted">Ong et al., 2024</span></td><td>Learned routers between a strong and a weak model cut cost while keeping quality.</td><td>Closest prior art for escalation.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2305.05176">FrugalGPT</a> ◦<br><span class="muted">Chen et al., 2023</span></td><td>LLM cascades: cheap model first, expensive on doubt.</td><td>Cascade baseline.</td></tr>
+<tr><td><a href="https://docs.lmcache.ai/kv_cache_optimizations/cacheblend.html">CacheBlend</a> ✓<br><span class="muted">Yao et al., NSDI 2025</span></td><td>Reuse KV for chunks anywhere in a prompt; recompute a small share of tokens at boundaries.</td><td>How shared chunks get combined.</td></tr>
+<tr><td><a href="https://blog.lmcache.ai/en/2026/10/16/finding-reusable-kv-caches-across-a-fleet-of-servers-lmcaches-mp-multiprocess-coordinator/">LMCache fleet coordinator</a> ✓<br><span class="muted">Blog, Oct 2026</span></td><td>Finds cached chunks anywhere in a prompt across a fleet of servers.</td><td>The mechanism we build on; it has no notion of teams or permissions.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2606.16824">CacheWise</a> ✓<br><span class="muted">Jun 2026</span></td><td>KV cache management for coding agents in vLLM; up to ~3.5× faster sessions.</td><td>Within one session; we extend across a team.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2605.24022">Adaptive KV Cache Reuse</a> ✓<br><span class="muted">May 2026</span></td><td>Groups non-prefix reuse methods: Prompt Cache, CacheBlend, EPIC, KVLink, CacheSlide.</td><td>Related-work map.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2409.20002">The Early Bird Catches the Leak</a> ✓<br><span class="muted">2024</span></td><td>Timing side channels on shared KV caches recover other users' prompts.</td><td>Threat model.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2502.07776">Auditing Prompt Caching</a> ✓<br><span class="muted">Gu et al., ICML 2025</span></td><td>Found global cross-user cache sharing at 7 API providers (snapshot at time of testing).</td><td>Threat model.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2608.09225">Governing the KV Cache</a> ✓<br><span class="muted">Aug 2026</span></td><td>Cache keys aren't bound to the requester; proposes mitigations for multi-tenant serving.</td><td>Basis for permission-scoped keys.</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2402.17753">LoCoMo</a> ✓ · <a href="https://www.swebench.com">SWE-bench</a> ◦</td><td>Long-conversation memory benchmark; real GitHub issues with gold patches.</td><td>Evaluation data.</td></tr>
+</table>
+
+<h3>Tools</h3>
+<table>
+<tr><th style="width:30%">Build with</th><th>Role</th></tr>
+<tr><td>Meta Model API (Muse Spark)</td><td>Escalation target; LoCoMo judge.</td></tr>
+<tr><td>Llama 8B Instruct (3B for dev)</td><td>The gateway. Check on day 1 for a newer small Meta open model.</td></tr>
+<tr><td><a href="https://github.com/vllm-project/vllm">vLLM</a> + <a href="https://docs.lmcache.ai/">LMCache</a></td><td>Serving and the shared KV cache.</td></tr>
+<tr><td>Postgres + pgvector</td><td>Shared memory, vector + keyword search, row-level security.</td></tr>
+<tr><td><a href="https://modal.com">Modal</a> · Neon</td><td>GPU and hosted Postgres for the demo.</td></tr>
+</table>
+<h3>Neighbours at the gateway layer</h3>
+<p class="lede" style="margin:0">LiteLLM proxy, Portkey, OpenRouter and RouteLLM (from memory) route requests between models. None shares memory or a cache across a team; provider prompt caching is prefix-only and short-lived.</p>
+</section>
+
+<footer>
+<b>Sources (searched 26 Oct 2026):</b>
+<ul>
+<li>Hackathon: <a href="https://dev.meta.ai/events/global-hackathon">dev.meta.ai/events/global-hackathon</a></li>
+<li>Modal pricing (third-party): <a href="https://www.spheron.network/blog/modal-gpu-pricing-2026-per-second-billing/">Spheron</a> · <a href="https://computeprices.com/compare/gpu-vs-modal">computeprices.com</a></li>
+<li>KV cache: <a href="https://docs.lmcache.ai/">LMCache docs</a> · <a href="https://docs.lmcache.ai/kv_cache_optimizations/blending.html">Blending</a> · <a href="https://mlsys.org/virtual/2026/invited-talk/3646">MLSys 2026 LMCache talk</a> · <a href="https://arxiv.org/pdf/2605.15913">Block-attention generalisation</a></li>
+<li>Security: <a href="https://arxiv.org/pdf/2409.20002">Early Bird</a> · <a href="https://www.alphaxiv.org/abs/2502.07776v2">Auditing Prompt Caching</a> · <a href="https://arxiv.org/pdf/2608.09225">Governing the KV Cache</a></li>
+</ul>
+Related: the original single-user research review and north star live in the <code>ai-os</code> repo (<code>ai-os/research/index.html</code>).
+</footer>
+</main>
+</body>
+</html>
