@@ -37,12 +37,12 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 |---|---|
 | Project plan (`research/index.html`) and this disclosure | Done (26 Oct) |
 | Llama gateway served with vLLM on Modal | Planned |
-| Escalation to Muse Spark (Meta Model API) | Planned |
-| OpenAI-compatible gateway server | Planned |
-| Shared text memory: Postgres + pgvector with row-level security | Planned |
+| Escalation to Muse Spark (Meta Model API) | Code done (27 Oct); not yet run against the live API |
+| OpenAI-compatible gateway server (rule-based gate, tool-call passthrough) | Done (27 Oct) |
+| Shared text memory: Postgres + pgvector with row-level security | Done (27 Oct) |
 | Shared KV cache (vLLM + LMCache) with permission-scoped cache keys | Planned |
 | Learned escalation gate | Planned |
-| Exact token accounting and spending cap | Planned |
+| Exact token accounting and spending cap | Done (27 Oct) |
 | Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Planned |
 | Results, dashboard, write-up, demo video | Planned |
 
