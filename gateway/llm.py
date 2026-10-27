@@ -10,7 +10,7 @@ class ChatClient:
         self.model = model
         self._http = httpx.AsyncClient(
             base_url=base_url,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
             timeout=timeout,
         )
 
