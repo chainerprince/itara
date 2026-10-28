@@ -55,25 +55,28 @@ _COLUMNS = "id, owner_id, kind, parent_id, source, content, keywords, token_coun
 
 # Hybrid search: reciprocal rank fusion of vector and keyword rankings over summaries.
 # Keyword matching uses OR across query words; ts_rank still favours matching more of them.
+# Every ranking breaks ties by id: summaries of near-identical file versions tie exactly, and
+# without a tie-break the same question can get different memory from one run (or teammate)
+# to the next, which breaks reproducible evals and shared-prefix cache hits.
 _SEARCH_SQL = f"""
 WITH vec AS (
-    SELECT id, row_number() OVER (ORDER BY embedding <=> %(vector)s) AS rank
+    SELECT id, row_number() OVER (ORDER BY embedding <=> %(vector)s, id) AS rank
     FROM memories
     WHERE kind = 'summary' AND embedding <=> %(vector)s < %(max_distance)s
-    ORDER BY embedding <=> %(vector)s
+    ORDER BY embedding <=> %(vector)s, id
     LIMIT 20
 ), kw AS (
-    SELECT id, row_number() OVER (ORDER BY ts_rank(tsv, query) DESC) AS rank
+    SELECT id, row_number() OVER (ORDER BY ts_rank(tsv, query) DESC, id) AS rank
     FROM memories, to_tsquery('simple', replace(plainto_tsquery('english', %(text)s)::text, '&', '|')) AS query
     WHERE kind = 'summary' AND tsv @@ query
-    ORDER BY ts_rank(tsv, query) DESC
+    ORDER BY ts_rank(tsv, query) DESC, id
     LIMIT 20
 )
 SELECT {", ".join(f"m.{c}" for c in _COLUMNS.split(", "))}
 FROM (SELECT * FROM vec UNION ALL SELECT * FROM kw) AS hits
 JOIN memories AS m USING (id)
 GROUP BY m.id
-ORDER BY sum(1.0 / (60 + hits.rank)) DESC
+ORDER BY sum(1.0 / (60 + hits.rank)) DESC, m.id
 LIMIT %(k)s
 """
 
