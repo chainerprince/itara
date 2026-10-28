@@ -140,6 +140,7 @@ footer ul { padding-left: 18px; }
 <table>
 <tr><th style="width:30%">Threat</th><th>Mitigation</th></tr>
 <tr><td>Reading another team's memory</td><td>Postgres row-level security on every memory row, keyed by team and user.</td></tr>
+<tr><td>Claiming to be someone else</td><td>Each API key maps to one team and user (only its hash is stored). Identity never comes from client-supplied headers. Usage reports and forced routes need an admin key.</td></tr>
 <tr><td>Inferring cached content from response timing (shown in published attacks)</td><td>Include the permission scope in every cache key, so hits only occur between people with the same access. Postgres stores which entries belong to which scope.</td></tr>
 <tr><td>Private conversations leaking into shared memory</td><td>Personal conversation memory is private by default. Only shared knowledge (codebase, docs, team decisions) goes into the team scope.</td></tr>
 <tr><td>Cache files on disk</td><td>Treat them as sensitive as the source code they were computed from.</td></tr>
@@ -190,6 +191,7 @@ footer ul { padding-left: 18px; }
     <li><code>cost ≈ questions × tokens/question × price per 1M tokens</code></li>
     <li>Size the evaluation to ~$100; keep ~$50 for dev and demo.</li>
     <li>Hard spending cap enforced in code from exact token counts.</li>
+    <li>Muse price not yet confirmed: placeholder $1 / $4 per 1M tokens until the key arrives, then size the eval.</li>
   </ul></div>
   <div class="card"><h4>Postgres ($0)</h4><ul>
     <li>Docker locally for development.</li>
@@ -227,17 +229,18 @@ footer ul { padding-left: 18px; }
 <h2>Feature freeze Mon 2 Nov</h2>
 <table>
 <tr><th>Day</th><th>Build</th><th>Done when</th></tr>
-<tr><td class="nw">Mon 26 Oct</td><td>Init repo + import commit + <code>DISCLOSURE.md</code>; read the rules. <code>modal token new</code>; Llama 8B on vLLM on Modal; Muse API hello-world; look up the Muse price and size the eval.</td><td>Both models answer from one script.</td></tr>
-<tr><td class="nw">Tue 27 Oct</td><td>Postgres + pgvector schema with row-level security; shared text memory (summaries + raw pages); exact token accounting and spend cap.</td><td>Two users see only what their scope allows.</td></tr>
-<tr><td class="nw">Wed 28 Oct</td><td>Gateway server (OpenAI-compatible), escalation to Muse with compact memory, tool-call passthrough.</td><td>A chat client works against the gateway URL.</td></tr>
-<tr><td class="nw">Thu 29 Oct</td><td>Shared KV cache: vLLM + LMCache with permission-scoped keys. <b>Fallback:</b> vLLM prefix caching shared on one server.</td><td>A second user's repeat request is measurably faster.</td></tr>
-<tr><td class="nw">Fri 30 Oct</td><td>Eval harness: SWE-bench Lite localisation + LoCoMo subset; team replay simulator.</td><td>One command runs any baseline on 20 items.</td></tr>
+<tr><td class="nw">Mon 26 Oct</td><td>Init repo + import commit + <code>DISCLOSURE.md</code>; read the rules. <code>modal token new</code>; Llama 8B on vLLM on Modal; Muse API hello-world; look up the Muse price and size the eval.</td><td>Both models answer from one script.<br><span class="warn">27 Oct: done locally with stand-ins</span> (<code>scripts/hello.py</code>); Modal + Muse when keys arrive.</td></tr>
+<tr><td class="nw">Tue 27 Oct</td><td>Postgres + pgvector schema with row-level security; shared text memory (summaries + raw pages); exact token accounting and spend cap.</td><td>Two users see only what their scope allows.<br><span class="good">Done 27 Oct</span>; identity now from API keys.</td></tr>
+<tr><td class="nw">Wed 28 Oct</td><td>Gateway server (OpenAI-compatible), escalation to Muse with compact memory, tool-call passthrough.</td><td>A chat client works against the gateway URL.<br><span class="good">Done 27 Oct</span> (stock <code>openai</code> SDK, local models).</td></tr>
+<tr><td class="nw">Thu 29 Oct</td><td>Shared KV cache: vLLM + LMCache with permission-scoped keys. <b>Fallback:</b> vLLM prefix caching shared on one server.</td><td>A second user's repeat request is measurably faster.<br><span class="warn">27 Oct: shown locally</span> on Ollama's prefix cache (<code>scripts/cache_check.py</code>: teammate 6–19× faster, other team cold); LMCache on Modal untested.</td></tr>
+<tr><td class="nw">Fri 30 Oct</td><td>Eval harness: SWE-bench Lite localisation + LoCoMo subset; team replay simulator.</td><td>One command runs any baseline on 20 items.<br><span class="good">Done 27 Oct</span> (<code>python -m eval.run</code>); smoke-tested on 2 items with stand-ins.</td></tr>
 <tr><td class="nw">Sat 31 Oct</td><td>Run baselines: Muse-direct, Llama-only, rule gate, no-sharing.</td><td>First results table.</td></tr>
 <tr><td class="nw">Sun 1 Nov</td><td>Learned gate (4 actions), λ sweep, team-scaling curve.</td><td>Numbers frozen; north star marked pass or fail, honestly.</td></tr>
 <tr><td class="nw">Mon 2 Nov</td><td><b>Feature freeze.</b> Dashboard (company tokens + GPU-seconds saved), deploy on Modal, README.</td><td>Demo runs from a clean checkout.</td></tr>
 <tr><td class="nw">Tue 3 Nov</td><td>Write-up (4-page workshop format) + 3-minute video.</td><td>Draft and video complete.</td></tr>
 <tr><td class="nw">Wed 4 Nov</td><td>Buffer. Submit by noon ET; hard deadline 9:00 PM ET.</td><td>Submitted.</td></tr>
 </table>
+<p class="muted" style="font-size:13px;margin-top:8px"><b>Local stand-ins until the Modal and Meta keys arrive:</b> Ollama <code>llama3.2:3b</code> plays the Llama gateway and Ollama <code>llama3.1:8b</code> plays Muse, with placeholder prices. Switching is an <code>.env</code> change (see <code>.env.example</code>). Every usage and eval number is labelled <code>muse_is_standin</code>; none of the stand-in numbers count as results.</p>
 <p class="muted" style="font-size:13px;margin-top:8px">If the shared KV cache isn't working by Fri 30 Oct, ship with prefix caching and report the KV result as future work. The gateway + shared text memory result stands on its own.</p>
 </section>
 

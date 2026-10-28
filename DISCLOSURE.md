@@ -36,15 +36,17 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 | Component | Status |
 |---|---|
 | Project plan (`research/index.html`) and this disclosure | Done (26 Oct) |
-| Llama gateway served with vLLM on Modal | Planned |
-| Escalation to Muse Spark (Meta Model API) | Code done (27 Oct); not yet run against the live API |
-| OpenAI-compatible gateway server (rule-based gate, tool-call passthrough) | Done (27 Oct) |
+| Llama gateway served with vLLM on Modal | `modal_app.py` written (27 Oct), not yet deployed. Ollama on a laptop stands in. |
+| Escalation to Muse Spark (Meta Model API) | Code done (27 Oct). Tested against a local open model (Llama 3.1 8B) standing in for Muse, not yet against the live API. |
+| OpenAI-compatible gateway server (rule-based gate, tool-call passthrough, API-key identity) | Done (27 Oct); tested with the stock `openai` SDK on local models |
 | Shared text memory: Postgres + pgvector with row-level security | Done (27 Oct) |
-| Shared KV cache (vLLM + LMCache) with permission-scoped cache keys | Planned |
+| Shared KV cache with permission-scoped keys | Scoped keys done (27 Oct) and shown on Ollama's prefix cache: a teammate reuses the cached prefix, another team doesn't. vLLM + LMCache not yet tested. |
 | Learned escalation gate | Planned |
 | Exact token accounting and spending cap | Done (27 Oct) |
-| Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Planned |
+| Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Harness done (27 Oct); smoke-tested only. No results yet. |
 | Results, dashboard, write-up, demo video | Planned |
+
+The Official Rules still need to be read and the pre-existing-work wording confirmed.
 
 Update each status as work lands. The commit history is the authoritative record.
 
