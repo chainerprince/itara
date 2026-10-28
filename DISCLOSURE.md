@@ -43,7 +43,8 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 | Shared KV cache with permission-scoped keys | Scoped keys done (27 Oct) and shown on Ollama's prefix cache: a teammate reuses the cached prefix, another team doesn't. vLLM + LMCache not yet tested. |
 | Learned escalation gate | Planned |
 | Exact token accounting and spending cap | Done (27 Oct) |
-| Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Harness done (27 Oct); smoke-tested only. No results yet. |
+| Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Done (27 Oct). Checked on 28 Oct against a deterministic simulated model (`eval/sim.py`) on all items, using invariant checks (`eval/checks.py`). |
+| Day 6 baselines and results notebook (`eval/day6_results.ipynb`) | Code done (28 Oct). Numbers so far come from simulated or local stand-in models and are labelled as such; not results. |
 | Results, dashboard, write-up, demo video | Planned |
 
 The Official Rules still need to be read and the pre-existing-work wording confirmed.
