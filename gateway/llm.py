@@ -6,7 +6,7 @@ import httpx
 
 
 class ChatClient:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 120.0) -> None:
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 600.0) -> None:
         self.model = model
         self._http = httpx.AsyncClient(
             base_url=base_url,
