@@ -29,6 +29,7 @@ class Scope:
 @dataclass
 class Memory:
     id: UUID
+    owner_id: str | None
     kind: str
     parent_id: UUID | None
     source: str | None
@@ -50,7 +51,7 @@ def default_embedder() -> Embedder:
     return lambda texts: [vector.tolist() for vector in model.embed(texts)]
 
 
-_COLUMNS = "id, kind, parent_id, source, content, keywords, token_count"
+_COLUMNS = "id, owner_id, kind, parent_id, source, content, keywords, token_count"
 
 # Hybrid search: reciprocal rank fusion of vector and keyword rankings over summaries.
 # Keyword matching uses OR across query words; ts_rank still favours matching more of them.
@@ -86,6 +87,9 @@ class MemoryStore:
     async def scoped(self, scope: Scope) -> AsyncIterator[AsyncConnection]:
         async with self._pool.connection() as conn, conn.transaction():
             await conn.execute("SET LOCAL ROLE gateway_app")
+            # HNSW returns a fixed number of candidates and RLS filters them afterwards; keep
+            # scanning until enough visible rows are found, or other teams' rows crowd ours out.
+            await conn.execute("SET LOCAL hnsw.iterative_scan = relaxed_order")
             await conn.execute(
                 "SELECT set_config('app.team_id', %s, true), set_config('app.user_id', %s, true)",
                 (scope.team_id, scope.user_id),
@@ -138,6 +142,14 @@ class MemoryStore:
             cur = conn.cursor(row_factory=class_row(Memory))
             await cur.execute(_SEARCH_SQL, params)
             return await cur.fetchall()
+
+    async def has_source(self, scope: Scope, source: str) -> bool:
+        async with self.scoped(scope) as conn:
+            cur = await conn.execute(
+                "SELECT exists(SELECT 1 FROM memories WHERE kind = 'summary' AND source = %s)",
+                (source,),
+            )
+            return (await cur.fetchone())[0]
 
     async def pages(self, scope: Scope, summary_ids: list[UUID]) -> list[Memory]:
         """Raw pages behind the given summaries, for when exact details matter."""

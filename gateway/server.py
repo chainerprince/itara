@@ -1,7 +1,9 @@
 """OpenAI-compatible gateway: point any app's base URL at /v1.
 
-Callers identify themselves with X-Team-Id and X-User-Id headers. Clients that ask for
-streaming get the whole answer as a single chunk.
+Callers authenticate with `Authorization: Bearer <gateway key>` (scripts/add_key.py), which
+every OpenAI SDK already sends; the key decides the caller's team and user. Clients that ask
+for streaming get the whole answer as a single chunk. Run with a single worker: the spend
+reservation lives in this process.
 """
 
 from __future__ import annotations
@@ -18,12 +20,14 @@ from pgvector.psycopg import register_vector_async
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
+from cache.lmcache import scoped_body, with_memory
 from gateway.accounting import Ledger, SpendCapExceeded
+from gateway.auth import Principal, Principals
 from gateway.config import Settings
 from gateway.gate import ESCALATIONS, Route, has_tools, rule_gate
 from gateway.llm import ChatClient
 from memory.compress import ingest
-from memory.store import Memory, MemoryStore, Scope, default_embedder
+from memory.store import MemoryStore, default_embedder
 
 
 @dataclass
@@ -32,6 +36,9 @@ class Services:
     ledger: Ledger
     llama: ChatClient
     muse: ChatClient
+    principals: Principals
+    llama_backend: str = "ollama"
+    muse_is_standin: bool = False
 
 
 async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionPool]:
@@ -43,6 +50,9 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
                       settings.muse_input_price_per_m, settings.muse_output_price_per_m),
         llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model),
         muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model),
+        principals=Principals(pool),
+        llama_backend=settings.llama_backend,
+        muse_is_standin=settings.muse_is_standin,
     )
     return services, pool
 
@@ -53,18 +63,23 @@ class MemoryIn(BaseModel):
     private: bool = False
 
 
-def scope_of(request: Request) -> Scope:
-    team, user = request.headers.get("x-team-id"), request.headers.get("x-user-id")
-    if not team or not user:
-        raise HTTPException(400, "X-Team-Id and X-User-Id headers are required")
-    return Scope(team_id=team, user_id=user)
+async def principal_of(request: Request) -> Principal:
+    scheme, _, key = request.headers.get("authorization", "").partition(" ")
+    principal = None
+    if scheme.lower() == "bearer" and key:
+        principal = await request.app.state.services.principals.lookup(key.strip())
+    if principal is None:
+        raise HTTPException(401, "A valid gateway API key is required (Authorization: Bearer ...)")
+    return principal
 
 
-def route_override(request: Request) -> Route | None:
-    """X-Gateway-Route forces a route, for running baselines and debugging."""
+def route_override(request: Request, principal: Principal) -> Route | None:
+    """X-Gateway-Route forces a route, for running baselines and debugging. Admin keys only."""
     value = request.headers.get("x-gateway-route")
     if value is None:
         return None
+    if not principal.is_admin:
+        raise HTTPException(403, "X-Gateway-Route needs an admin key")
     if value not in Route.__members__.values() or value == Route.PASSTHROUGH:
         raise HTTPException(400, f"Unknown X-Gateway-Route: {value}")
     return Route(value)
@@ -78,19 +93,6 @@ def last_user_text(messages: list[dict]) -> str:
                 return " ".join(p.get("text", "") for p in content if p.get("type") == "text")
             return content
     return ""
-
-
-def with_memory(messages: list[dict], memories: list[Memory]) -> list[dict]:
-    """Add memories to the system message (or a new one at the start)."""
-    if not memories:
-        return messages
-    context = "Relevant team memory:\n\n" + "\n\n".join(
-        f"[{m.source or 'memory'}] {m.content}" for m in memories
-    )
-    first = messages[0] if messages else {}
-    if first.get("role") == "system" and isinstance(first.get("content"), str):
-        return [{**first, "content": f"{first['content']}\n\n{context}"}, *messages[1:]]
-    return [{"role": "system", "content": context}, *messages]
 
 
 def as_sse(response: dict) -> StreamingResponse:
@@ -134,9 +136,13 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.exception_handler(httpx.HTTPStatusError)
     async def upstream_error(request: Request, exc: httpx.HTTPStatusError):
+        # Keep rate limits as 429; anything else is the model's failure, not the caller's
+        # (an upstream 401 must not look like the caller's gateway key was rejected).
+        status = exc.response.status_code
         return JSONResponse(
-            {"error": {"message": exc.response.text, "type": "upstream_error"}},
-            status_code=exc.response.status_code,
+            {"error": {"message": f"Model returned {status}: {exc.response.text}",
+                       "type": "upstream_error"}},
+            status_code=429 if status == 429 else 502,
         )
 
     @app.exception_handler(httpx.RequestError)
@@ -153,31 +159,38 @@ def create_app(services: Services | None = None) -> FastAPI:
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request):
         s: Services = request.app.state.services
-        scope = scope_of(request)
+        principal = await principal_of(request)
+        scope = principal.scope
         body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
+            raise HTTPException(400, "Request body needs a messages list")
 
         if has_tools(body):
             route, memories = Route.PASSTHROUGH, []
         else:
-            question = last_user_text(body.get("messages", []))
+            question = last_user_text(body["messages"])
             hits = await s.store.search(scope, question)
-            route = route_override(request) or rule_gate(question, hits)
+            route = route_override(request, principal) or rule_gate(question, hits)
             if route == Route.ESCALATE_RAW:
                 memories = await s.store.pages(scope, [h.id for h in hits])
             elif route in (Route.LOCAL_MEMORY, Route.ESCALATE_COMPACT):
                 memories = hits
             else:
                 memories = []
-            body = {**body, "messages": with_memory(body["messages"], memories)}
+            if route in ESCALATIONS:  # Muse gets memory but never the cache scope
+                body = {**body, "messages": with_memory(body["messages"], memories)}
+            else:
+                body = scoped_body(body, scope, memories, s.llama_backend)
 
         paid = route in ESCALATIONS
         client = s.muse if paid else s.llama
-        async with s.ledger.reserve(s.ledger.worst_case_cost(body)) if paid else nullcontext():
+        estimate = s.ledger.worst_case_cost(body) if paid else 0.0
+        async with s.ledger.reserve(estimate) if paid else nullcontext():
             start = time.monotonic()
             response = await client.chat(body)
             latency_ms = int((time.monotonic() - start) * 1000)
             await s.ledger.record(scope, client.model, route, response.get("usage", {}),
-                                  latency_ms, paid=paid)
+                                  latency_ms, paid=paid, estimate_usd=estimate)
 
         headers = {"X-Gateway-Route": route.value}
         if body.get("stream"):
@@ -190,15 +203,25 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def add_memory(item: MemoryIn, request: Request):
         """Add text (docs, code, decisions) to memory: team-shared, or private to the caller."""
         s: Services = request.app.state.services
-        ids = await ingest(s.store, s.llama, scope_of(request), item.text,
-                           source=item.source, private=item.private)
+        scope = (await principal_of(request)).scope
+        start = time.monotonic()
+        ids, usages = await ingest(s.store, s.llama, scope, item.text,
+                                   source=item.source, private=item.private)
+        latency_ms = int((time.monotonic() - start) * 1000) // max(1, len(usages))
+        for page_usage in usages:  # compression is local work the team pays for once
+            await s.ledger.record(scope, s.llama.model, "ingest", page_usage, latency_ms,
+                                  paid=False)
         return {"ids": [str(i) for i in ids]}
 
     @app.get("/v1/usage")
     async def usage(request: Request):
-        ledger: Ledger = request.app.state.services.ledger
-        return {"spent_usd": await ledger.spent(), "cap_usd": ledger.cap_usd,
-                "by_model_route": await ledger.summary()}
+        """Company-wide spend. Admin keys only."""
+        if not (await principal_of(request)).is_admin:
+            raise HTTPException(403, "/v1/usage needs an admin key")
+        s: Services = request.app.state.services
+        return {"spent_usd": await s.ledger.spent(), "cap_usd": s.ledger.cap_usd,
+                "muse_model": s.muse.model, "muse_is_standin": s.muse_is_standin,
+                "by_model_route": await s.ledger.summary()}
 
     return app
 

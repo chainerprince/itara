@@ -48,3 +48,26 @@ async def test_reservations_block_concurrent_overspend(pool):
     await task
     async with ledger.reserve(0.3):
         pass
+
+
+async def test_paid_call_without_usage_is_charged_the_estimate(pool):
+    async with pool.connection() as conn:
+        await conn.execute("TRUNCATE usage")
+    ledger = Ledger(pool, cap_usd=1.0, input_price_per_m=1.0, output_price_per_m=1.0)
+    await ledger.record(SCOPE, "muse", "escalate_compact", {}, 10, paid=True, estimate_usd=0.25)
+    assert await ledger.spent() == pytest.approx(0.25)
+
+
+async def test_cached_tokens_are_recorded(pool):
+    async with pool.connection() as conn:
+        await conn.execute("TRUNCATE usage")
+    ledger = Ledger(pool, cap_usd=1.0, input_price_per_m=0, output_price_per_m=0)
+    usage = {"prompt_tokens": 100, "prompt_tokens_details": {"cached_tokens": 64}}
+    await ledger.record(SCOPE, "llama", "local", usage, 10, paid=False)
+    assert (await ledger.summary())[0]["cached_tokens"] == 64
+
+
+def test_worst_case_is_an_upper_bound_for_code():
+    ledger = Ledger(pool=None, cap_usd=1, input_price_per_m=1e6, output_price_per_m=0)
+    code = "x=f(a,b);" * 100  # ~1 token per 2-3 characters
+    assert ledger.worst_case_cost({"messages": [{"content": code}]}) >= len(code) / 2

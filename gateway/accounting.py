@@ -2,7 +2,8 @@
 
 Costs come from the token counts each API response reports. Before a paid call, the
 worst-case cost (estimated prompt + max_tokens) is reserved, so concurrent requests
-can't push total spend past the cap.
+can't push total spend past the cap. The reservation lives in this process, so run the
+server with a single worker.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from psycopg_pool import AsyncConnectionPool
 
-from memory.store import Scope, estimate_tokens
+from memory.store import Scope
 
 DEFAULT_MAX_TOKENS = 1024
 
@@ -41,7 +42,8 @@ class Ledger:
         return (prompt_tokens * self._input_price + completion_tokens * self._output_price) / 1e6
 
     def worst_case_cost(self, body: dict) -> float:
-        prompt = estimate_tokens(str(body.get("messages", "")) + str(body.get("tools", "")))
+        # ~2 characters per token: an upper bound even for code, which tokenizes densely.
+        prompt = len(str(body.get("messages", "")) + str(body.get("tools", ""))) // 2 + 1
         completion = body.get("max_completion_tokens") or body.get("max_tokens") or DEFAULT_MAX_TOKENS
         return self.cost(prompt, completion)
 
@@ -66,16 +68,33 @@ class Ledger:
             self._reserved -= estimate_usd
 
     async def record(
-        self, scope: Scope, model: str, route: str, usage: dict, latency_ms: int, paid: bool
+        self,
+        scope: Scope,
+        model: str,
+        route: str,
+        usage: dict,
+        latency_ms: int,
+        paid: bool,
+        estimate_usd: float = 0.0,
     ) -> None:
+        """Record one call. A paid call with no token counts is charged estimate_usd."""
         prompt = usage.get("prompt_tokens", 0)
         completion = usage.get("completion_tokens", 0)
-        cost = self.cost(prompt, completion) if paid else 0.0
+        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
+        estimated = paid and not (prompt or completion)
+        if not paid:
+            cost = 0.0
+        elif estimated:
+            cost = estimate_usd
+        else:
+            cost = self.cost(prompt, completion)
         async with self._pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO usage (team_id, user_id, model, route, prompt_tokens,"
-                " completion_tokens, cost_usd, latency_ms) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (scope.team_id, scope.user_id, model, route, prompt, completion, cost, latency_ms),
+                "INSERT INTO usage (team_id, user_id, model, route, prompt_tokens, completion_tokens,"
+                " cached_tokens, cost_usd, latency_ms, estimated)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (scope.team_id, scope.user_id, model, route, prompt, completion, cached, cost,
+                 latency_ms, estimated),
             )
 
     async def summary(self) -> list[dict]:
@@ -83,10 +102,12 @@ class Ledger:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 "SELECT model, route, count(*), sum(prompt_tokens), sum(completion_tokens),"
-                " sum(cost_usd) FROM usage GROUP BY model, route ORDER BY model, route"
+                " sum(cached_tokens), sum(latency_ms), sum(cost_usd)"
+                " FROM usage GROUP BY model, route ORDER BY model, route"
             )
-            keys = ("model", "route", "requests", "prompt_tokens", "completion_tokens", "cost_usd")
+            keys = ("model", "route", "requests", "prompt_tokens", "completion_tokens",
+                    "cached_tokens", "latency_ms", "cost_usd")
             return [
-                {**dict(zip(keys, row)), "cost_usd": float(row[5])}
+                {**dict(zip(keys, row)), "cost_usd": float(row[7])}
                 for row in await cur.fetchall()
             ]

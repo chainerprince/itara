@@ -65,5 +65,19 @@ CREATE TABLE IF NOT EXISTS usage (
     latency_ms        int NOT NULL,
     created_at        timestamptz NOT NULL DEFAULT now()
 );
+-- cached_tokens: prompt tokens served from the KV cache (reported by vLLM).
+-- estimated: a paid response came back without usage, so the reserved worst case was recorded.
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS cached_tokens int NOT NULL DEFAULT 0;
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS estimated boolean NOT NULL DEFAULT false;
+
+-- API keys. Identity comes only from here, never from client-supplied headers.
+-- Not granted to gateway_app; only the hash of each key is stored.
+CREATE TABLE IF NOT EXISTS principals (
+    key_sha256 text PRIMARY KEY,
+    team_id    text NOT NULL,
+    user_id    text NOT NULL,
+    is_admin   boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON memories TO gateway_app;

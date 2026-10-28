@@ -58,17 +58,31 @@ def parse_compression(text: str) -> tuple[str, list[str]]:
     return data.get("summary", ""), data.get("keywords", [])
 
 
-async def compress(llm: ChatClient, page: str) -> tuple[str, list[str]]:
-    response = await llm.chat({
-        "messages": [
-            {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Compress the following text:\n\n{page}"},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 512,
-        "response_format": {"type": "json_object"},
-    })
-    return parse_compression(response["choices"][0]["message"]["content"])
+async def compress(llm: ChatClient, page: str) -> tuple[str, list[str], list[dict]]:
+    """Summary and keywords for one page, plus the usage of each model call.
+
+    Small models sometimes return invalid JSON: retry once, then fall back to the start of
+    the page as its own summary so the page is still stored and searchable.
+    """
+    usages = []
+    for _ in range(2):
+        response = await llm.chat({
+            "messages": [
+                {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Compress the following text:\n\n{page}"},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 512,
+            "response_format": {"type": "json_object"},
+        })
+        usages.append(response.get("usage", {}))
+        try:
+            summary, keywords = parse_compression(response["choices"][0]["message"]["content"])
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(summary, str) and summary.strip():
+            return summary, [k for k in keywords if isinstance(k, str)], usages
+    return page[:600], [], usages
 
 
 async def ingest(
@@ -78,10 +92,14 @@ async def ingest(
     text: str,
     source: str | None = None,
     private: bool = False,
-) -> list[UUID]:
-    """Split text into pages, compress each with the local model, store summary + page."""
-    ids = []
+) -> tuple[list[UUID], list[dict]]:
+    """Split text into pages, compress each with the local model, store summary + page.
+
+    Returns the summary ids and the usage of every compression call.
+    """
+    ids, usages = [], []
     for page in split_pages(text):
-        summary, keywords = await compress(llm, page)
+        summary, keywords, page_usages = await compress(llm, page)
+        usages += page_usages
         ids.append(await store.add(scope, summary, keywords, page, source=source, private=private))
-    return ids
+    return ids, usages

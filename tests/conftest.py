@@ -40,3 +40,23 @@ async def pool():
     await pool.open()
     yield pool
     await pool.close()
+
+
+class FakeModel:
+    """Stands in for any OpenAI-compatible model; remembers every request."""
+
+    def __init__(self, model: str, reply: str | None = None):
+        self.model = model
+        self.reply = reply
+        self.requests: list[dict] = []
+
+    async def chat(self, body):
+        self.requests.append(body)
+        message = {"role": "assistant", "content": self.reply or f"answer from {self.model}"}
+        if body.get("tools"):
+            message["tool_calls"] = [{"id": "c1", "type": "function",
+                                      "function": {"name": "f", "arguments": "{}"}}]
+        return {"id": "x", "object": "chat.completion", "created": 0, "model": self.model,
+                "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110,
+                          "prompt_tokens_details": {"cached_tokens": 40}}}

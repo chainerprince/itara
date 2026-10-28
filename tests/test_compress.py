@@ -25,7 +25,26 @@ class FakeLlama:
 async def test_ingest(pool):
     store = MemoryStore(pool, fake_embed)
     scope = Scope("ingest-team", "carol")
-    ids = await ingest(store, FakeLlama(), scope, "deploy steps for billing", source="runbook.md")
-    assert len(ids) == 1
+    ids, usages = await ingest(store, FakeLlama(), scope, "deploy steps for billing",
+                               source="runbook.md")
+    assert len(ids) == len(usages) == 1
     pages = await store.pages(scope, ids)
     assert pages[0].content == "deploy steps for billing"
+
+
+class BadJsonLlama:
+    calls = 0
+
+    async def chat(self, body):
+        self.calls += 1
+        return {"choices": [{"message": {"content": "Sure! Here is a summary"}}], "usage": {}}
+
+
+async def test_bad_json_falls_back_to_page_start(pool):
+    store = MemoryStore(pool, fake_embed)
+    scope = Scope("ingest-team", "carol")
+    llm = BadJsonLlama()
+    ids, _ = await ingest(store, llm, scope, "rotate keys monthly " * 50)
+    assert llm.calls == 2
+    hits = await store.search(scope, "rotate keys monthly")
+    assert hits and hits[0].content.startswith("rotate keys monthly")
