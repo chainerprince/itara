@@ -29,6 +29,14 @@ Does the response give the same answer as the gold answer? Ignore wording and ex
 dates must refer to the same time. Reply with exactly one word: CORRECT or WRONG."""
 
 
+def turns_by_id(conversation: dict) -> dict[str, str]:
+    """dia_id -> the turn exactly as it appears in a session doc."""
+    return {t["dia_id"]: f"{t['speaker']}: {t['text']}"
+            for key, value in conversation.items()
+            if key.startswith("session_") and isinstance(value, list)
+            for t in value if "dia_id" in t}
+
+
 def sessions(conversation: dict) -> list[tuple[str, str]]:
     """(name, text) for each session in order, with its date and speaker-labelled turns."""
     out = []
@@ -47,6 +55,7 @@ def items_from(samples: list[dict]) -> list[Item]:
         docs = [(f"locomo:{sample['sample_id']}:{name}", text)
                 for name, text in sessions(sample["conversation"])]
         transcript = "\n\n".join(text for _, text in docs)
+        turns = turns_by_id(sample["conversation"])
         for i, qa in enumerate(sample["qa"]):
             if qa["category"] == 5 or "answer" not in qa:
                 continue
@@ -59,6 +68,8 @@ def items_from(samples: list[dict]) -> list[Item]:
                 raw_context=f"{transcript}\n\n{question}",
                 gold=str(qa["answer"]),
                 meta={"question": qa["question"], "category": qa["category"]},
+                # Exact turns only: a paraphrased memory summary counts as not seen.
+                evidence=[[turns[d]] for d in qa.get("evidence", []) if d in turns],
             ))
     return items
 
@@ -76,10 +87,10 @@ def parse_verdict(text: str) -> bool:
     return text.strip().upper().startswith("CORRECT")
 
 
-async def judge(harness: Harness, item: Item, answer: str) -> dict:
+async def judge(harness: Harness, item: Item, answer: str, user: str) -> dict:
     prompt = JUDGE_PROMPT.format(question=item.meta["question"], gold=item.gold, answer=answer)
     response, _ = await harness.paid_call(
-        Scope(item.team_id, "judge"), "judge",
+        Scope(item.team_id, user), "judge",
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": 4, "temperature": 0})
     verdict = response["choices"][0]["message"].get("content") or ""
     return {"correct": parse_verdict(verdict), "judge": verdict.strip()}

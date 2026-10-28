@@ -66,6 +66,10 @@ def to_item(row: dict) -> Item:
         raw_context=f"{context}\n\n{INSTRUCTION}",
         gold=gold_files(row["patch"]),
         meta={"retrieved": [path for path, _ in files]},
+        # A gold file counts as seen when its contents are in the prompt: as a file in the
+        # retrieved context, or as a memory whose source is that path. Not when the issue
+        # merely names it.
+        evidence=[[f"[start of {p}]", f"[{p}@"] for p in gold_files(row["patch"])],
     )
 
 

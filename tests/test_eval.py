@@ -3,7 +3,7 @@ import json
 import pytest
 
 from eval import common, locomo, replay, swebench_loc
-from eval.common import Harness, Item, check_cost, summarise
+from eval.common import Harness, Item, RunLog, check_cost, evidence_visible, summarise
 from gateway.accounting import Ledger, SpendCapExceeded
 from gateway.auth import Principals
 from gateway.server import Services
@@ -45,6 +45,11 @@ def test_swebench_item_and_score():
         "README.rst", "django/db/models/query.py"]
     assert item.raw_context.rstrip().endswith(swebench_loc.INSTRUCTION)
     assert "</code>" in item.raw_context and "single patch file" not in item.raw_context
+    # Seen in the full context; not seen just because the issue names it.
+    assert evidence_visible(swebench_loc.to_item({**ROW, "patch": PATCH.split("diff --git a/docs")[0]}),
+                            item.raw_context)
+    assert not evidence_visible(item, "the bug is in django/db/models/query.py")
+    assert evidence_visible(item, "[django/db/models/query.py@1234abcd] s\n[docs/ref.txt@00000000] s")
     assert swebench_loc.score(item, "django/db/models/query.py") == {
         "hit": False, "recall": 0.5, "ceiling": False}
     assert swebench_loc.score(item, "django/db/models/query.py\ndocs/ref.txt")["hit"]
@@ -53,12 +58,15 @@ def test_swebench_item_and_score():
 def test_locomo_items_skip_adversarial():
     sample = {"sample_id": "c1", "conversation": {
         "speaker_a": "A", "speaker_b": "B", "session_1_date_time": "1 May 2023",
-        "session_1": [{"speaker": "A", "text": "I adopted a cat"}],
+        "session_1": [{"speaker": "A", "dia_id": "D1:1", "text": "I adopted a cat"}],
         "session_2": [{"speaker": "B", "text": "Nice"}]},
-        "qa": [{"question": "What did A adopt?", "answer": "a cat", "category": 1},
+        "qa": [{"question": "What did A adopt?", "answer": "a cat", "category": 1,
+                "evidence": ["D1:1"]},
                {"question": "Trick?", "adversarial_answer": "x", "category": 5}]}
     (item,) = locomo.items_from([sample])
     assert item.gold == "a cat" and len(item.docs) == 2
+    assert item.evidence == [["A: I adopted a cat"]]
+    assert evidence_visible(item, item.raw_context) and not evidence_visible(item, item.question)
     assert "1 May 2023" in item.docs[0][1] and "A: I adopted a cat" in item.raw_context
     assert locomo.parse_verdict(" correct.") and not locomo.parse_verdict("WRONG")
 
@@ -81,7 +89,7 @@ async def harness(pool, tmp_path, monkeypatch):
     services = Services(store=MemoryStore(pool, fake_embed), ledger=Ledger(pool, 1.0, 1.0, 2.0),
                         llama=llama, muse=FakeModel("muse"), principals=Principals(pool),
                         muse_is_standin=True)
-    async with Harness(services) as h:
+    async with Harness(services, run_id="test") as h:
         yield h
 
 
@@ -96,12 +104,19 @@ def items(n, team="eval:test"):
 async def test_baselines_end_to_end(harness, tmp_path):
     local = await harness.ask(items(1)[0], "llama_only", user="u")
     assert local.route == "local_memory" and local.llama_prompt_tokens == 100
+    assert local.compute_tokens == 100 - 40 + 10 and local.gold_in_hits is not None
+    assert local.ingest_pages == 2 and local.retrieved_sources == []  # "s" never matches
     direct = await harness.ask(items(1)[0], "muse_direct", user="u")
     assert direct.route == "muse_direct" and direct.muse_prompt_tokens == 100
-    summary = summarise([local, direct], "hit")
-    path = common.write("swebench_test", [local, direct], {**harness.labels(), **summary})
-    assert json.loads(path.read_text())["muse_is_standin"] is True
-    assert len((tmp_path / "raw").glob("*.jsonl").__next__().read_text().splitlines()) == 2
+    assert direct.compute_tokens == 0 and direct.gold_in_hits is None
+    log = RunLog("swebench_test", "r1")
+    for result in (local, direct):
+        log.append(result)
+    assert [r.baseline for r in log.results()] == ["llama_only", "muse_direct"]
+    assert log.done() == {("t0", "u")}
+    path = log.write_summary({**harness.labels(), **summarise(log.results(), "hit")})
+    summary = json.loads(path.read_text())
+    assert summary["muse_is_standin"] is True and summary["run_id"] == "r1"
 
 
 async def test_spend_cap_blocks_muse_direct(harness):
@@ -115,6 +130,11 @@ def test_cost_guard():
     with pytest.raises(SystemExit):
         check_cost(ledger, [{"messages": "x" * 100}], yes=False)
     assert check_cost(ledger, [{"messages": "x" * 100}], yes=True) > 5
+
+
+async def test_forced_compact_escalation(harness):
+    result = await harness.ask(items(1)[0], "escalate_compact", user="u")
+    assert result.route == "escalate_compact" and result.muse_prompt_tokens == 100
 
 
 def compressions(harness):
@@ -134,3 +154,50 @@ async def test_replay_shares_ingest_only_with_sharing(harness):
 def test_summary_averages_only_numeric_scores():
     results = [common.Result("a", "b", "u", "local", "", {"correct": True, "judge": "CORRECT"})]
     assert summarise(results, "correct")["accuracy"] == 1.0
+
+
+def test_sim_prefix_cache_is_scoped_by_salt():
+    from eval.sim import PrefixCache
+
+    cache, text = PrefixCache(), "shared team context " * 50
+    assert cache.lookup_and_insert(text, "team-a") == 0
+    assert cache.lookup_and_insert(text, "team-a") > 200
+    assert cache.lookup_and_insert(text, "team-b") == 0
+    assert cache.lookup_and_insert(text + " more", "team-a") > 200
+
+
+async def test_sim_answers_only_from_visible_evidence():
+    from eval.sim import SimIndex, SimModel, weak_succeeds
+
+    item = swebench_loc.to_item(ROW)
+    strong = SimModel("sim-strong", SimIndex([item]))
+    ask = lambda text: strong.chat({"messages": [{"role": "user", "content": text}]})  # noqa: E731
+    seen = await ask(item.raw_context.replace("[end of django/db/models/query.py]",
+                                              "[start of docs/ref.txt]\n[end of docs/ref.txt]"))
+    assert seen["choices"][0]["message"]["content"].splitlines() == item.gold
+    unseen = await ask(item.question)  # the issue alone shows no files
+    assert swebench_loc.score(item, unseen["choices"][0]["message"]["content"])["hit"] is False
+    assert weak_succeeds("x") == weak_succeeds("x")
+
+
+async def test_sim_compression_and_judge():
+    from eval.sim import SimIndex, SimModel
+
+    sim = SimModel("sim-weak", SimIndex([]))
+    compressed = await sim.chat({"messages": [
+        {"role": "system", "content": "You are a memory compression agent. ..."},
+        {"role": "user", "content": "Compress the following text:\n\nFile a.py:\n1 def refund():\n"}]})
+    assert json.loads(compressed["choices"][0]["message"]["content"])["keywords"] == ["refund"]
+    verdict = await sim.chat({"messages": [{"role": "user", "content": locomo.JUDGE_PROMPT.format(
+        question="q", gold="7 May 2023", answer="On 7 May, 2023.")}]})
+    assert verdict["choices"][0]["message"]["content"] == "CORRECT"
+
+
+def test_order_related_follows_file_overlap():
+    def item(i, files):
+        return Item(id=i, team_id="t", docs=[], question="", raw_context="", gold=[],
+                    meta={"retrieved": files})
+
+    ordered = replay.order_related([item("lonely", ["z.py"]), item("a", ["x.py", "y.py"]),
+                                    item("b", ["x.py"]), item("c", ["y.py", "w.py"])])
+    assert [i.id for i in ordered][-1] == "lonely" and ordered[0].id == "a"

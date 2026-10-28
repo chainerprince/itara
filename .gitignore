@@ -13,6 +13,7 @@ __pycache__/
 
 # Local data and results
 *.db
-eval/results/raw/
+# Eval outputs: simulated and stand-in numbers stay local; add real results deliberately (git add -f)
+eval/results/
 .DS_Store
 eval/data/
