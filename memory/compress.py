@@ -58,8 +58,8 @@ def parse_compression(text: str) -> tuple[str, list[str]]:
     return data.get("summary", ""), data.get("keywords", [])
 
 
-async def compress(llm: ChatClient, page: str) -> tuple[str, list[str], list[dict]]:
-    """Summary and keywords for one page, plus the usage of each model call.
+async def compress(llm: ChatClient, page: str) -> tuple[str, list[str], list[dict], bool]:
+    """Summary and keywords for one page, the usage of each model call, and whether it fell back.
 
     Small models sometimes return invalid JSON: retry once, then fall back to the start of
     the page as its own summary so the page is still stored and searchable.
@@ -81,8 +81,8 @@ async def compress(llm: ChatClient, page: str) -> tuple[str, list[str], list[dic
         except (ValueError, AttributeError):
             continue
         if isinstance(summary, str) and summary.strip():
-            return summary, [k for k in keywords if isinstance(k, str)], usages
-    return page[:600], [], usages
+            return summary, [k for k in keywords if isinstance(k, str)], usages, False
+    return page[:600], [], usages, True
 
 
 async def ingest(
@@ -92,14 +92,16 @@ async def ingest(
     text: str,
     source: str | None = None,
     private: bool = False,
-) -> tuple[list[UUID], list[dict]]:
+) -> tuple[list[UUID], list[dict], int]:
     """Split text into pages, compress each with the local model, store summary + page.
 
-    Returns the summary ids and the usage of every compression call.
+    Returns the summary ids, the usage of every compression call, and how many pages fell
+    back to raw text because the model's JSON was unusable.
     """
-    ids, usages = [], []
+    ids, usages, fallbacks = [], [], 0
     for page in split_pages(text):
-        summary, keywords, page_usages = await compress(llm, page)
+        summary, keywords, page_usages, fell_back = await compress(llm, page)
         usages += page_usages
+        fallbacks += fell_back
         ids.append(await store.add(scope, summary, keywords, page, source=source, private=private))
-    return ids, usages
+    return ids, usages, fallbacks

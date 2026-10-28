@@ -48,8 +48,10 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         store=MemoryStore(pool, default_embedder()),
         ledger=Ledger(pool, settings.spend_cap_usd,
                       settings.muse_input_price_per_m, settings.muse_output_price_per_m),
-        llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model),
-        muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model),
+        llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
+                         cache_path=settings.model_cache),
+        muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model,
+                        cache_path=settings.model_cache),
         principals=Principals(pool),
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
@@ -188,7 +190,10 @@ def create_app(services: Services | None = None) -> FastAPI:
         async with s.ledger.reserve(estimate) if paid else nullcontext():
             start = time.monotonic()
             response = await client.chat(body)
-            latency_ms = int((time.monotonic() - start) * 1000)
+            # A response replayed from the model cache keeps the latency of the real call.
+            latency_ms = response.pop("_replayed_latency_ms", None)
+            if latency_ms is None:
+                latency_ms = int((time.monotonic() - start) * 1000)
             await s.ledger.record(scope, client.model, route, response.get("usage", {}),
                                   latency_ms, paid=paid, estimate_usd=estimate)
 
@@ -205,13 +210,13 @@ def create_app(services: Services | None = None) -> FastAPI:
         s: Services = request.app.state.services
         scope = (await principal_of(request)).scope
         start = time.monotonic()
-        ids, usages = await ingest(s.store, s.llama, scope, item.text,
-                                   source=item.source, private=item.private)
+        ids, usages, fallbacks = await ingest(s.store, s.llama, scope, item.text,
+                                              source=item.source, private=item.private)
         latency_ms = int((time.monotonic() - start) * 1000) // max(1, len(usages))
         for page_usage in usages:  # compression is local work the team pays for once
             await s.ledger.record(scope, s.llama.model, "ingest", page_usage, latency_ms,
                                   paid=False)
-        return {"ids": [str(i) for i in ids]}
+        return {"ids": [str(i) for i in ids], "fallback_pages": fallbacks}
 
     @app.get("/v1/usage")
     async def usage(request: Request):

@@ -26,3 +26,7 @@ class Settings(BaseSettings):
     muse_is_standin: bool = False
 
     spend_cap_usd: float = 150.0
+
+    # Optional sqlite file that stores every model response, so repeated experiments don't
+    # call the model again (eval only; see gateway/llm.py).
+    model_cache: str = ""
