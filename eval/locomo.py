@@ -1,0 +1,85 @@
+"""LoCoMo subset: questions about long two-person conversations, graded by an LLM judge.
+
+Each conversation is one team and each session one memory. Categories 1-4 only; category 5
+(adversarial) has no gold answer. The judge is the "Muse" model, called through the spend
+cap and recorded as route "judge", separate from the answering tokens. Verdicts are kept
+in the JSONL for the hand spot-check of 50.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+from pathlib import Path
+
+import httpx
+
+from eval.common import Harness, Item
+from memory.store import Scope
+
+URL = "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json"
+DATA = Path(__file__).parent / "data" / "locomo10.json"
+INSTRUCTION = "Answer the question in a short phrase, using what was said in the conversation."
+JUDGE_PROMPT = """\
+Question: {question}
+Gold answer: {gold}
+Response: {answer}
+
+Does the response give the same answer as the gold answer? Ignore wording and extra detail;
+dates must refer to the same time. Reply with exactly one word: CORRECT or WRONG."""
+
+
+def sessions(conversation: dict) -> list[tuple[str, str]]:
+    """(name, text) for each session in order, with its date and speaker-labelled turns."""
+    out = []
+    n = 1
+    while f"session_{n}" in conversation:
+        turns = "\n".join(f"{t['speaker']}: {t['text']}" for t in conversation[f"session_{n}"])
+        date = conversation.get(f"session_{n}_date_time", "")
+        out.append((f"session_{n}", f"Conversation on {date}\n{turns}"))
+        n += 1
+    return out
+
+
+def items_from(samples: list[dict]) -> list[Item]:
+    items = []
+    for sample in samples:
+        docs = [(f"locomo:{sample['sample_id']}:{name}", text)
+                for name, text in sessions(sample["conversation"])]
+        transcript = "\n\n".join(text for _, text in docs)
+        for i, qa in enumerate(sample["qa"]):
+            if qa["category"] == 5 or "answer" not in qa:
+                continue
+            question = f"{qa['question']}\n\n{INSTRUCTION}"
+            items.append(Item(
+                id=f"{sample['sample_id']}:{i}",
+                team_id=f"eval:locomo:{sample['sample_id']}",
+                docs=docs,
+                question=question,
+                raw_context=f"{transcript}\n\n{question}",
+                gold=str(qa["answer"]),
+                meta={"question": qa["question"], "category": qa["category"]},
+            ))
+    return items
+
+
+def load(n: int, seed: int = 0) -> list[Item]:
+    if not DATA.exists():
+        DATA.parent.mkdir(parents=True, exist_ok=True)
+        DATA.write_bytes(httpx.get(URL, follow_redirects=True, timeout=60).raise_for_status().content)
+    items = items_from(json.loads(DATA.read_text()))
+    picked = random.Random(seed).sample(items, min(n, len(items)))
+    return sorted(picked, key=lambda item: item.team_id)  # one conversation's items together
+
+
+def parse_verdict(text: str) -> bool:
+    return text.strip().upper().startswith("CORRECT")
+
+
+async def judge(harness: Harness, item: Item, answer: str) -> dict:
+    prompt = JUDGE_PROMPT.format(question=item.meta["question"], gold=item.gold, answer=answer)
+    response, _ = await harness.paid_call(
+        Scope(item.team_id, "judge"), "judge",
+        {"messages": [{"role": "user", "content": prompt}], "max_tokens": 4, "temperature": 0})
+    verdict = response["choices"][0]["message"].get("content") or ""
+    return {"correct": parse_verdict(verdict), "judge": verdict.strip()}
