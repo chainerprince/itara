@@ -20,6 +20,9 @@ from memory.store import Scope
 URL = "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json"
 DATA = Path(__file__).parent / "data" / "locomo10.json"
 INSTRUCTION = "Answer the question in a short phrase, using what was said in the conversation."
+# Muse Spark is a reasoning model and max_tokens counts its reasoning: a verdict takes ~70
+# tokens at minimal effort (~250 at the default), so leave room or the verdict comes back empty.
+JUDGE_MAX_TOKENS = 1024
 JUDGE_PROMPT = """\
 Question: {question}
 Gold answer: {gold}
@@ -32,6 +35,14 @@ dates must refer to the same time. Reply with exactly one word: CORRECT or WRONG
 def turns_by_id(conversation: dict) -> dict[str, str]:
     """dia_id -> the turn exactly as it appears in a session doc."""
     return {t["dia_id"]: f"{t['speaker']}: {t['text']}"
+            for key, value in conversation.items()
+            if key.startswith("session_") and isinstance(value, list)
+            for t in value if "dia_id" in t}
+
+
+def session_of_turn(conversation: dict) -> dict[str, str]:
+    """dia_id -> the name of the session it was said in."""
+    return {t["dia_id"]: key
             for key, value in conversation.items()
             if key.startswith("session_") and isinstance(value, list)
             for t in value if "dia_id" in t}
@@ -56,6 +67,7 @@ def items_from(samples: list[dict]) -> list[Item]:
                 for name, text in sessions(sample["conversation"])]
         transcript = "\n\n".join(text for _, text in docs)
         turns = turns_by_id(sample["conversation"])
+        session = session_of_turn(sample["conversation"])
         for i, qa in enumerate(sample["qa"]):
             if qa["category"] == 5 or "answer" not in qa:
                 continue
@@ -70,6 +82,9 @@ def items_from(samples: list[dict]) -> list[Item]:
                 meta={"question": qa["question"], "category": qa["category"]},
                 # Exact turns only: a paraphrased memory summary counts as not seen.
                 evidence=[[turns[d]] for d in qa.get("evidence", []) if d in turns],
+                # So retrieval is still measurable: memory from the evidence's sessions.
+                evidence_sources=sorted({f"locomo:{sample['sample_id']}:{session[d]}"
+                                         for d in qa.get("evidence", []) if d in session}),
             ))
     return items
 
@@ -89,8 +104,10 @@ def parse_verdict(text: str) -> bool:
 
 async def judge(harness: Harness, item: Item, answer: str, user: str) -> dict:
     prompt = JUDGE_PROMPT.format(question=item.meta["question"], gold=item.gold, answer=answer)
-    response, _ = await harness.paid_call(
-        Scope(item.team_id, user), "judge",
-        {"messages": [{"role": "user", "content": prompt}], "max_tokens": 4, "temperature": 0})
+    body = {"messages": [{"role": "user", "content": prompt}], "max_tokens": JUDGE_MAX_TOKENS,
+            "temperature": 0}
+    if not harness.services.muse_is_standin:  # the local stand-in isn't a reasoning model
+        body["reasoning_effort"] = "minimal"
+    response, _ = await harness.paid_call(Scope(item.team_id, user), "judge", body)
     verdict = response["choices"][0]["message"].get("content") or ""
     return {"correct": parse_verdict(verdict), "judge": verdict.strip()}

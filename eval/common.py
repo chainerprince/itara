@@ -7,7 +7,12 @@ never be mixed up.
 
 Each result also records what the model could see: whether the evidence was in the full
 retrieved context (`in_context`, the ceiling) and in the memory the gateway retrieved
-(`gold_in_hits`). That separates "retrieval missed" from "the model missed".
+(`gold_in_hits`). That separates "retrieval missed" from "the model missed". Where markers
+can't survive summarising (LoCoMo turns), `source_in_hits` asks the looser question: did
+the gateway retrieve memory from every doc holding the evidence?
+
+Answers are requested at temperature 0, so a difference in accuracy comes from what the
+model was shown, not from sampling.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -30,6 +36,7 @@ RESULTS = Path(__file__).parent / "results"
 BASELINES = ("muse_direct", "escalate_compact", "llama_only", "rule_gate", "no_sharing", "full")
 FORCED_ROUTES = {"llama_only": "local_memory", "escalate_compact": "escalate_compact"}
 COST_GUARD_USD = 5.0
+ANSWER_TEMPERATURE = 0.0  # without it vLLM samples Llama 3.1 at its default 0.6
 
 
 @dataclass
@@ -44,6 +51,8 @@ class Item:
     # What a model must see to answer: one list of acceptable markers per piece of evidence
     # (e.g. a gold file's path as it appears in context or in a memory source label).
     evidence: list[list[str]] = field(default_factory=list)
+    # The docs (sources) that hold the evidence, where markers can't survive summarising.
+    evidence_sources: list[str] = field(default_factory=list)
 
 
 def evidence_visible(item: Item, text: str) -> bool:
@@ -66,6 +75,7 @@ class Result:
     run_id: str = ""
     in_context: bool = False             # evidence is in the full retrieved context (ceiling)
     gold_in_hits: bool | None = None     # evidence is in the memory the gateway retrieved
+    source_in_hits: bool | None = None   # memory from every evidence doc was retrieved
     retrieved_sources: list[str] = field(default_factory=list)
     muse_prompt_tokens: int = 0
     muse_completion_tokens: int = 0
@@ -138,11 +148,35 @@ class Harness:
                 fallbacks += r.json().get("fallback_pages", 0)
         return seconds, pages, fallbacks
 
+    async def ingest_many(self, items: list[Item], user: str,
+                          report: Callable[[Item, tuple[float, int, int]], None] | None = None,
+                          ) -> list[tuple[float, int, int]]:
+        """ingest() for each item into its own team: one at a time, or with INGEST_CONCURRENCY
+        above 1, several at once. The gateway's limit caps compression calls in flight; this
+        only keeps enough docs queued to fill it. `report` is called as each item finishes."""
+        n = self.services.ingest_concurrency
+        if n <= 1:
+            results = []
+            for item in items:
+                results.append(await self.ingest(item, item.team_id, user))
+                if report:
+                    report(item, results[-1])
+            return results
+        queued = asyncio.Semaphore(4 * n)
+
+        async def one(item: Item) -> tuple[float, int, int]:
+            async with queued:
+                result = await self.ingest(item, item.team_id, user)
+            if report:
+                report(item, result)
+            return result
+
+        return list(await asyncio.gather(*(one(item) for item in items)))
+
     async def ingest_all(self, items: list[Item], user: str) -> None:
         """Fill memory for every item before answering any, so all memory baselines see the
         same memory (otherwise a baseline run first would see less than one run later)."""
-        for item in items:
-            await self.ingest(item, item.team_id, user)
+        await self.ingest_many(items, user)
 
     async def ask(self, item: Item, baseline: str, user: str, team: str | None = None) -> Result:
         """Answer one item with one baseline (scoring is up to the benchmark)."""
@@ -151,7 +185,8 @@ class Harness:
         if baseline == "muse_direct":
             response, seconds = await self.paid_call(
                 Scope(team, user), "muse_direct",
-                {"messages": [{"role": "user", "content": item.raw_context}]})
+                {"messages": [{"role": "user", "content": item.raw_context}],
+                 "temperature": ANSWER_TEMPERATURE})
             result = self._result(item, baseline, user, "muse_direct", response, seconds)
             result.in_context = in_context
             return result
@@ -165,7 +200,8 @@ class Harness:
         headers = await self.headers(team, user)
         if baseline in FORCED_ROUTES:
             headers["X-Gateway-Route"] = FORCED_ROUTES[baseline]
-        body = {"messages": [{"role": "user", "content": item.question}]}
+        body = {"messages": [{"role": "user", "content": item.question}],
+                "temperature": ANSWER_TEMPERATURE}
         start = time.monotonic()
         r = await self.gw.post("/v1/chat/completions", json=body, headers=headers)
         r.raise_for_status()
@@ -174,6 +210,8 @@ class Harness:
         result.in_context = in_context
         result.gold_in_hits = evidence_visible(item, render_memory(hits))
         result.retrieved_sources = [m.source or "" for m in hits]
+        if item.evidence_sources:
+            result.source_in_hits = set(item.evidence_sources) <= set(result.retrieved_sources)
         result.ingest_seconds, result.ingest_pages, result.ingest_fallbacks = (
             ingest_seconds, pages, fallbacks)
         return result
@@ -215,6 +253,8 @@ class Harness:
         return {"llama_model": s.llama.model, "muse_model": s.muse.model,
                 "muse_is_standin": s.muse_is_standin,
                 "simulated": s.llama.model.startswith("sim-"),
+                "ingest_concurrency": s.ingest_concurrency,
+                "answer_temperature": ANSWER_TEMPERATURE,
                 "replayed_calls": getattr(s.llama, "replayed", 0)
                 + getattr(s.muse, "replayed", 0)}
 
@@ -267,6 +307,7 @@ def summarise(results: list[Result], headline: str) -> dict:
     scores = sorted({k for r in results for k, v in r.score.items()
                      if isinstance(v, (bool, int, float))})
     diagnosed = [r for r in results if r.gold_in_hits is not None]
+    sourced = [r for r in results if r.source_in_hits is not None]
     pages = total("ingest_pages")
     return {
         "items": len(results),
@@ -276,12 +317,15 @@ def summarise(results: list[Result], headline: str) -> dict:
         "in_context_rate": total("in_context") / n,
         "gold_in_hits_rate": (sum(bool(r.gold_in_hits) for r in diagnosed) / len(diagnosed)
                               if diagnosed else None),
+        "source_in_hits_rate": (sum(r.source_in_hits for r in sourced) / len(sourced)
+                                if sourced else None),
         "muse_prompt_tokens": total("muse_prompt_tokens"),
         "muse_completion_tokens": total("muse_completion_tokens"),
         "llama_prompt_tokens": total("llama_prompt_tokens"),
         "cached_tokens": total("cached_tokens"),
         "compute_tokens": total("compute_tokens"),
         "llama_seconds": round(sum(r.seconds for r in results if not r.muse_prompt_tokens), 2),
+        # Sum of each request's ingest time: only comparable at the same ingest_concurrency.
         "ingest_seconds": round(total("ingest_seconds"), 2),
         "ingest_pages": pages,
         "ingest_fallback_rate": total("ingest_fallbacks") / pages if pages else None,

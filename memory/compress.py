@@ -7,6 +7,7 @@ compression and the result goes to Postgres instead of Elasticsearch.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from uuid import UUID
 
@@ -92,15 +93,34 @@ async def ingest(
     text: str,
     source: str | None = None,
     private: bool = False,
+    limit: asyncio.Semaphore | None = None,
 ) -> tuple[list[UUID], list[dict], int]:
     """Split text into pages, compress each with the local model, store summary + page.
+
+    Without `limit`, pages are compressed and stored one at a time. With it, they are
+    compressed concurrently (at most `limit` calls in flight, shared with any other ingest
+    holding the same semaphore) and then stored in page order, so memory ends up the same.
 
     Returns the summary ids, the usage of every compression call, and how many pages fell
     back to raw text because the model's JSON was unusable.
     """
     ids, usages, fallbacks = [], [], 0
-    for page in split_pages(text):
-        summary, keywords, page_usages, fell_back = await compress(llm, page)
+    pages = split_pages(text)
+    if limit is None:
+        for page in pages:
+            summary, keywords, page_usages, fell_back = await compress(llm, page)
+            usages += page_usages
+            fallbacks += fell_back
+            ids.append(await store.add(scope, summary, keywords, page, source=source,
+                                       private=private))
+        return ids, usages, fallbacks
+
+    async def limited(page: str):
+        async with limit:
+            return await compress(llm, page)
+
+    compressed = await asyncio.gather(*(limited(page) for page in pages))
+    for page, (summary, keywords, page_usages, fell_back) in zip(pages, compressed):
         usages += page_usages
         fallbacks += fell_back
         ids.append(await store.add(scope, summary, keywords, page, source=source, private=private))

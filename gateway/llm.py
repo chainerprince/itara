@@ -34,6 +34,9 @@ class ChatClient:
             base_url=base_url,
             headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
             timeout=timeout,
+            # Modal answers a request still running after 150s (e.g. during a cold start)
+            # with a 303 to a URL that waits for the result.
+            follow_redirects=True,
         )
         self._cache = None
         if cache_path:

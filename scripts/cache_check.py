@@ -57,6 +57,8 @@ async def main() -> None:
                 r.raise_for_status()
                 usage = r.json().get("usage", {})
                 cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+                if settings.llama_backend == "vllm":  # vLLM omits the details when none cached
+                    cached = cached or 0
                 rows.append((label, time.monotonic() - start, usage.get("prompt_tokens"), cached))
     await services.llama.close()
     await services.muse.close()
@@ -77,7 +79,7 @@ async def main() -> None:
     assert bob_cached > bob_prompt // 2, "expected bob to reuse alice's cached prefix"
     assert carol_cached < 64, "carol reused another team's cache"
     print(f"cached tokens: bob reused {bob_cached}/{bob_prompt}; carol only {carol_cached} "
-          "(chat template header): isolation confirmed")
+          "(at most the chat template header): isolation confirmed")
 
 if __name__ == "__main__":
     asyncio.run(main())

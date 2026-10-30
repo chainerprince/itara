@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     spend_cap_usd: float = 150.0
 
+    # Compression calls in flight at once while ingesting (shared by every request). 1 is the
+    # original one-page-at-a-time path; more lets vLLM batch them (see memory/compress.py).
+    ingest_concurrency: int = 1
+
     # Optional sqlite file that stores every model response, so repeated experiments don't
     # call the model again (eval only; see gateway/llm.py).
     model_cache: str = ""

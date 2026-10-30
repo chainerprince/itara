@@ -15,14 +15,15 @@ LONG_EXPECTED_TOKENS = 10_000
 
 
 async def check(name: str, client: ChatClient) -> None:
+    # Room for a reasoning model (Muse Spark), whose max_tokens includes its reasoning.
     short = await client.chat({"messages": [{"role": "user", "content": "Say hello in five words."}],
-                               "max_tokens": 32})
+                               "max_tokens": 1024})
     print(f"{name} ({client.model}): {short['choices'][0]['message']['content']!r}")
     print(f"  usage: {short.get('usage')}")
     long = await client.chat({"messages": [{"role": "user",
                                             "content": LONG_PROMPT + "\nWhat is the secret "
                                                        "word? Reply with only the word."}],
-                              "max_tokens": 16})
+                              "max_tokens": 1024})
     tokens = long.get("usage", {}).get("prompt_tokens", 0)
     answer = long["choices"][0]["message"]["content"]
     ok = tokens >= LONG_EXPECTED_TOKENS

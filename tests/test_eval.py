@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -66,6 +67,7 @@ def test_locomo_items_skip_adversarial():
     (item,) = locomo.items_from([sample])
     assert item.gold == "a cat" and len(item.docs) == 2
     assert item.evidence == [["A: I adopted a cat"]]
+    assert item.evidence_sources == ["locomo:c1:session_1"]
     assert evidence_visible(item, item.raw_context) and not evidence_visible(item, item.question)
     assert "1 May 2023" in item.docs[0][1] and "A: I adopted a cat" in item.raw_context
     assert locomo.parse_verdict(" correct.") and not locomo.parse_verdict("WRONG")
@@ -109,6 +111,13 @@ async def test_baselines_end_to_end(harness, tmp_path):
     direct = await harness.ask(items(1)[0], "muse_direct", user="u")
     assert direct.route == "muse_direct" and direct.muse_prompt_tokens == 100
     assert direct.compute_tokens == 0 and direct.gold_in_hits is None
+    # Answers are never sampled; source_in_hits only applies to items that name evidence docs.
+    assert harness.services.llama.requests[-1]["temperature"] == 0
+    assert harness.services.muse.requests[-1]["temperature"] == 0
+    assert local.source_in_hits is None
+    sourced = await harness.ask(replace(items(1)[0], evidence_sources=["shared.py"]),
+                                "llama_only", user="u")
+    assert sourced.source_in_hits is False  # retrieved_sources is empty here
     log = RunLog("swebench_test", "r1")
     for result in (local, direct):
         log.append(result)

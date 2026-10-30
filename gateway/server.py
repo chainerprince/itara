@@ -8,10 +8,11 @@ reservation lives in this process.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from contextlib import asynccontextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -39,6 +40,13 @@ class Services:
     principals: Principals
     llama_backend: str = "ollama"
     muse_is_standin: bool = False
+    ingest_concurrency: int = 1
+    # One limit for the whole process, so concurrent ingests can't multiply it.
+    ingest_limit: asyncio.Semaphore | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        if self.ingest_concurrency > 1:
+            self.ingest_limit = asyncio.Semaphore(self.ingest_concurrency)
 
 
 async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionPool]:
@@ -55,6 +63,7 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         principals=Principals(pool),
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
+        ingest_concurrency=settings.ingest_concurrency,
     )
     return services, pool
 
@@ -211,7 +220,9 @@ def create_app(services: Services | None = None) -> FastAPI:
         scope = (await principal_of(request)).scope
         start = time.monotonic()
         ids, usages, fallbacks = await ingest(s.store, s.llama, scope, item.text,
-                                              source=item.source, private=item.private)
+                                              source=item.source, private=item.private,
+                                              limit=s.ingest_limit)
+        # Wall time per call: with concurrent ingest that's throughput, not one call's latency.
         latency_ms = int((time.monotonic() - start) * 1000) // max(1, len(usages))
         for page_usage in usages:  # compression is local work the team pays for once
             await s.ledger.record(scope, s.llama.model, "ingest", page_usage, latency_ms,

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import time
 
 from eval import locomo, replay, swebench_loc
 from eval.common import BASELINES, Harness, RunLog, check_cost, new_run_id, summarise
@@ -30,8 +31,8 @@ def worst_case_bodies(items, baseline: str, judged: bool) -> list[dict]:
     else:  # upper bound: everything escalates with the full retrieved context
         bodies = [{"messages": [{"role": "user", "content": i.raw_context}]} for i in items]
     if judged:
-        bodies += [{"messages": [{"role": "user", "content": i.question}], "max_tokens": 4}
-                   for i in items]
+        bodies += [{"messages": [{"role": "user", "content": i.question}],
+                    "max_tokens": locomo.JUDGE_MAX_TOKENS} for i in items]
     return bodies
 
 
@@ -45,17 +46,26 @@ async def run_bench(args) -> None:
     todo = [i for i in items if (i.id, user) not in log.done()]
     async with Harness(run_id=run_id) as harness:
         if args.ingest_only:  # idempotent: docs already in memory are skipped
-            totals = [0.0, 0, 0]
-            for n, item in enumerate(todo, 1):
-                seconds, pages, fallbacks = await harness.ingest(item, item.team_id, user)
-                totals = [totals[0] + seconds, totals[1] + pages, totals[2] + fallbacks]
-                print(f"[{n}/{len(todo)}] {item.id}: {pages} pages, {fallbacks} fallbacks, "
+            finished = 0
+
+            def report(item, result) -> None:
+                nonlocal finished
+                finished += 1
+                seconds, pages, fallbacks = result
+                print(f"[{finished}/{len(todo)}] {item.id}: {pages} pages, {fallbacks} fallbacks, "
                       f"{seconds:.0f}s")
+
+            start = time.monotonic()
+            results = await harness.ingest_many(todo, user, report)
+            wall = time.monotonic() - start
+            pages = sum(r[1] for r in results)
+            fallbacks = sum(r[2] for r in results)
             path = log.write_summary({
                 "bench": args.bench, "phase": "ingest", **harness.labels(),
-                "items": len(todo), "ingest_seconds": round(totals[0], 1),
-                "ingest_pages": totals[1],
-                "ingest_fallback_rate": totals[2] / totals[1] if totals[1] else None})
+                "items": len(todo), "ingest_seconds": round(sum(r[0] for r in results), 1),
+                "ingest_wall_seconds": round(wall, 1), "ingest_pages": pages,
+                "pages_per_second": round(pages / wall, 3) if wall else None,
+                "ingest_fallback_rate": fallbacks / pages if pages else None})
             print(f"Wrote {path}")
             return
         check_cost(harness.ledger, worst_case_bodies(todo, args.baseline, bench is locomo),

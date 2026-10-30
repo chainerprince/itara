@@ -3,10 +3,13 @@
 Slow: loads the dataset and ingests ~30 items. Run with `uv run pytest -m slow`.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from eval import checks, replay, swebench_loc
 from eval.common import Harness
+from eval.ingest_check import team_pages
 from eval.sim import SimIndex, SimModel
 from gateway.accounting import Ledger
 from gateway.auth import Principals
@@ -23,11 +26,12 @@ def items():
     return swebench_loc.load(30, seed=1, repo="django/django")
 
 
-def services(pool, items, backend="vllm"):
+def services(pool, items, backend="vllm", ingest_concurrency=1):
     index = SimIndex(items)
     return Services(store=MemoryStore(pool, fake_embed), ledger=Ledger(pool, 1000.0, 1.0, 4.0),
                     llama=SimModel("sim-weak", index), muse=SimModel("sim-strong", index),
-                    principals=Principals(pool), llama_backend=backend)
+                    principals=Principals(pool), llama_backend=backend,
+                    ingest_concurrency=ingest_concurrency)
 
 
 async def run(harness, items, baseline):
@@ -80,3 +84,16 @@ async def test_sharing_ingests_less_than_no_sharing(pool, items):
     # A team never ingests more than its members would separately (equal only if their
     # tasks share no file versions).
     assert sum(r.ingest_pages for r in shared) <= sum(r.ingest_pages for r in alone)
+
+
+async def test_concurrent_ingest_stores_the_same_memory(pool, items):
+    memory = {}
+    for concurrency in (1, 8):
+        tagged = [replace(item, team_id=f"{item.team_id}:c{concurrency}") for item in items]
+        async with Harness(services(pool, items, ingest_concurrency=concurrency),
+                           run_id=f"conc-{concurrency}") as h:
+            await h.ingest_all(tagged, "eval-conc")
+            teams = sorted({item.team_id for item in tagged})
+            memory[concurrency] = [sorted(row[:4] for row in await team_pages(h.services.store, t))
+                                   for t in teams]
+    assert memory[1] and memory[1] == memory[8]
