@@ -1,6 +1,8 @@
 """LoCoMo subset: questions about long two-person conversations, graded by an LLM judge.
 
-Each conversation is one team and each session one memory. Categories 1-4 only; category 5
+Each conversation is one team and each session one memory, labelled with the session's
+date: the date is said once at the start of a session, and a summary of a later page (or a
+summary that drops it) would otherwise leave "last Friday" unanswerable. Categories 1-4 only; category 5
 (adversarial) has no gold answer. The judge is the "Muse" model, called through the spend
 cap and recorded as route "judge", separate from the answering tokens. Verdicts are kept
 in the JSONL for the hand spot-check of 50.
@@ -48,14 +50,14 @@ def session_of_turn(conversation: dict) -> dict[str, str]:
             for t in value if "dia_id" in t}
 
 
-def sessions(conversation: dict) -> list[tuple[str, str]]:
-    """(name, text) for each session in order, with its date and speaker-labelled turns."""
+def sessions(conversation: dict) -> list[tuple[str, str, str]]:
+    """(name, date, text) for each session in order; the text has the date and labelled turns."""
     out = []
     n = 1
     while f"session_{n}" in conversation:
         turns = "\n".join(f"{t['speaker']}: {t['text']}" for t in conversation[f"session_{n}"])
         date = conversation.get(f"session_{n}_date_time", "")
-        out.append((f"session_{n}", f"Conversation on {date}\n{turns}"))
+        out.append((f"session_{n}", date, f"Conversation on {date}\n{turns}"))
         n += 1
     return out
 
@@ -63,8 +65,9 @@ def sessions(conversation: dict) -> list[tuple[str, str]]:
 def items_from(samples: list[dict]) -> list[Item]:
     items = []
     for sample in samples:
-        docs = [(f"locomo:{sample['sample_id']}:{name}", text)
-                for name, text in sessions(sample["conversation"])]
+        labels = {name: f"locomo:{sample['sample_id']}:{name}" + (f", {date}" if date else "")
+                  for name, date, _ in sessions(sample["conversation"])}
+        docs = [(labels[name], text) for name, _, text in sessions(sample["conversation"])]
         transcript = "\n\n".join(text for _, text in docs)
         turns = turns_by_id(sample["conversation"])
         session = session_of_turn(sample["conversation"])
@@ -83,7 +86,7 @@ def items_from(samples: list[dict]) -> list[Item]:
                 # Exact turns only: a paraphrased memory summary counts as not seen.
                 evidence=[[turns[d]] for d in qa.get("evidence", []) if d in turns],
                 # So retrieval is still measurable: memory from the evidence's sessions.
-                evidence_sources=sorted({f"locomo:{sample['sample_id']}:{session[d]}"
+                evidence_sources=sorted({labels[session[d]]
                                          for d in qa.get("evidence", []) if d in session}),
             ))
     return items

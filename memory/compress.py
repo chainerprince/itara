@@ -2,7 +2,10 @@
 
 The prompt and JSON parsing are adapted from the ai-os MemoryDaemon
 (imported/ai-os/src/agent_os/daemon.py, commit 1); here the local Llama model does the
-compression and the result goes to Postgres instead of Elasticsearch.
+compression and the result goes to Postgres instead of Elasticsearch. The prompt asks for
+one fact per sentence, with worked examples: given rules alone, Llama 3.1 8B wrote topic
+summaries ("A and B discuss ...") that lost who did what and when. The examples are made up,
+not taken from any benchmark.
 """
 
 from __future__ import annotations
@@ -19,10 +22,14 @@ You are a memory compression agent. Your job is to compress a chunk of text
 into a concise, information-dense summary that can be used for future context retrieval.
 
 Requirements:
-1. Capture ALL important facts, decisions, preferences, and action items.
-2. Preserve specific details: names, numbers, dates, code identifiers, technical terms.
-3. Use clear, searchable language — this summary will be indexed for hybrid search.
-4. Respond with ONLY a JSON object:
+1. Write the summary as short factual sentences, one fact per sentence: who did what,
+   and when. Never write "A and B discuss ..."; state what was actually said or done.
+2. Capture ALL important facts, decisions, preferences, and action items.
+3. Preserve specific details: names, numbers, dates, code identifiers, technical terms.
+4. Keep when things happened. If the text or its source says when it was written, turn
+   relative times ("yesterday", "last week", "two years ago") into dates.
+5. Use clear, searchable language — this summary will be indexed for hybrid search.
+6. Respond with ONLY a JSON object:
 
 {
   "summary": "concise but thorough summary of the chunk",
@@ -30,7 +37,15 @@ Requirements:
 }
 
 The keywords should include important nouns, technical terms, and topic identifiers
-that would help a search engine find this memory later."""
+that would help a search engine find this memory later.
+
+Example. Source: chat, 3 March 2024
+Priya: I finally started glassblowing classes last week! Tomas: Nice. We adopted a dog two days ago, her name is Biscuit.
+{"summary": "Priya started glassblowing classes the week before 3 March 2024. Tomas adopted a dog named Biscuit on 1 March 2024.", "keywords": ["Priya", "glassblowing classes", "Tomas", "dog", "Biscuit", "adoption"]}
+
+Example. Source: billing/retry.py
+def charge(card, amount, attempts=3): ... retries a declined charge up to three times, waiting 2 s, then raises PaymentError.
+{"summary": "charge() in billing/retry.py retries a declined charge up to 3 times, 2 seconds apart, then raises PaymentError.", "keywords": ["charge", "billing/retry.py", "retry", "declined charge", "PaymentError"]}"""
 
 
 def split_pages(text: str, max_chars: int = 2000) -> list[str]:
@@ -59,18 +74,25 @@ def parse_compression(text: str) -> tuple[str, list[str]]:
     return data.get("summary", ""), data.get("keywords", [])
 
 
-async def compress(llm: ChatClient, page: str) -> tuple[str, list[str], list[dict], bool]:
+async def compress(llm: ChatClient, page: str, source: str | None = None,
+                   ) -> tuple[str, list[str], list[dict], bool]:
     """Summary and keywords for one page, the usage of each model call, and whether it fell back.
+
+    The source label goes with every page, so a page that isn't the first of its doc still
+    knows where it came from (e.g. the date of the conversation, for relative times).
 
     Small models sometimes return invalid JSON: retry once, then fall back to the start of
     the page as its own summary so the page is still stored and searchable.
     """
     usages = []
+    text = f"Compress the following text:\n\n{page}"
+    if source:
+        text = f"Source: {source}\n\n{text}"
     for _ in range(2):
         response = await llm.chat({
             "messages": [
                 {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Compress the following text:\n\n{page}"},
+                {"role": "user", "content": text},
             ],
             "temperature": 0.2,
             "max_tokens": 512,
@@ -108,7 +130,7 @@ async def ingest(
     pages = split_pages(text)
     if limit is None:
         for page in pages:
-            summary, keywords, page_usages, fell_back = await compress(llm, page)
+            summary, keywords, page_usages, fell_back = await compress(llm, page, source)
             usages += page_usages
             fallbacks += fell_back
             ids.append(await store.add(scope, summary, keywords, page, source=source,
@@ -117,7 +139,7 @@ async def ingest(
 
     async def limited(page: str):
         async with limit:
-            return await compress(llm, page)
+            return await compress(llm, page, source)
 
     compressed = await asyncio.gather(*(limited(page) for page in pages))
     for page, (summary, keywords, page_usages, fell_back) in zip(pages, compressed):

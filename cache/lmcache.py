@@ -19,6 +19,12 @@ import hashlib
 
 from memory.store import Memory, Scope
 
+# Says what the bracketed labels are: small models otherwise ignore a date in a label.
+MEMORY_HEADER = (
+    "Relevant team memory. Each entry starts with its source in brackets. A source may end "
+    "with the date it was written: use it to date the events in that entry."
+)
+
 
 def cache_scope(scope: Scope, memories: list[Memory]) -> str:
     """Shared memory only: keyed by team. Any private memory: keyed by team and user."""
@@ -33,7 +39,7 @@ def with_memory(messages: list[dict], memories: list[Memory], marker: str = "") 
     parts = [marker] if marker else []
     if memories:
         ordered = sorted(memories, key=lambda m: (m.source or "", str(m.id)))
-        parts.append("Relevant team memory:\n\n" + "\n\n".join(
+        parts.append(MEMORY_HEADER + "\n\n" + "\n\n".join(
             f"[{m.source or 'memory'}] {m.content}" for m in ordered
         ))
     if not parts:

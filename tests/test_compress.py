@@ -35,6 +35,23 @@ async def test_ingest(pool):
     assert pages[0].content == "deploy steps for billing"
 
 
+async def test_every_page_is_compressed_with_its_source(pool):
+    class Recording(FakeLlama):
+        prompts: list[str] = []
+
+        async def chat(self, body):
+            self.prompts.append(body["messages"][1]["content"])
+            return await super().chat(body)
+
+    llm = Recording()
+    text = "\n\n".join(["Last Friday I adopted a cat. " * 40] * 3)  # three pages
+    await ingest(MemoryStore(pool, fake_embed), llm, Scope("ingest-team", "carol"), text,
+                 source="chat, 15 July 2023")
+    assert len(llm.prompts) == 3
+    assert all(p.startswith("Source: chat, 15 July 2023\n\nCompress the following text:")
+               for p in llm.prompts)
+
+
 class BadJsonLlama:
     calls = 0
 

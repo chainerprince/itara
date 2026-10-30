@@ -67,7 +67,9 @@ def test_locomo_items_skip_adversarial():
     (item,) = locomo.items_from([sample])
     assert item.gold == "a cat" and len(item.docs) == 2
     assert item.evidence == [["A: I adopted a cat"]]
-    assert item.evidence_sources == ["locomo:c1:session_1"]
+    assert item.docs[0][0] == "locomo:c1:session_1, 1 May 2023"  # the date in every label
+    assert item.docs[1][0] == "locomo:c1:session_2"
+    assert item.evidence_sources == ["locomo:c1:session_1, 1 May 2023"]
     assert evidence_visible(item, item.raw_context) and not evidence_visible(item, item.question)
     assert "1 May 2023" in item.docs[0][1] and "A: I adopted a cat" in item.raw_context
     assert locomo.parse_verdict(" correct.") and not locomo.parse_verdict("WRONG")
