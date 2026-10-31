@@ -33,8 +33,10 @@ from gateway.server import Services, build_services, create_app
 from memory.store import Memory, Scope
 
 RESULTS = Path(__file__).parent / "results"
-BASELINES = ("muse_direct", "escalate_compact", "llama_only", "rule_gate", "no_sharing", "full")
-FORCED_ROUTES = {"llama_only": "local_memory", "escalate_compact": "escalate_compact"}
+BASELINES = ("muse_direct", "escalate_compact", "escalate_raw", "llama_only", "rule_gate",
+             "no_sharing", "full")
+FORCED_ROUTES = {"llama_only": "local_memory", "escalate_compact": "escalate_compact",
+                 "escalate_raw": "escalate_raw"}
 COST_GUARD_USD = 5.0
 ANSWER_TEMPERATURE = 0.0  # without it vLLM samples Llama 3.1 at its default 0.6
 
@@ -190,8 +192,8 @@ class Harness:
             result = self._result(item, baseline, user, "muse_direct", response, seconds)
             result.in_context = in_context
             return result
-        if baseline == "full":
-            raise NotImplementedError("the learned gate arrives on day 7")
+        if baseline == "full" and self.services.gate is None:
+            raise SystemExit("full needs a learned gate: set GATE_PATH (see eval/learn_gate.py)")
         if baseline == "no_sharing":
             team = f"{team}:{user}"
         ingest_seconds, pages, fallbacks = await self.ingest(item, team, user)

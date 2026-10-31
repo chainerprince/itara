@@ -130,6 +130,11 @@ async def test_baselines_end_to_end(harness, tmp_path):
     assert summary["muse_is_standin"] is True and summary["run_id"] == "r1"
 
 
+async def test_full_needs_a_learned_gate(harness):
+    with pytest.raises(SystemExit):
+        await harness.ask(items(1)[0], "full", user="u")
+
+
 async def test_spend_cap_blocks_muse_direct(harness):
     harness.ledger.cap_usd = 0.0
     with pytest.raises(SpendCapExceeded):

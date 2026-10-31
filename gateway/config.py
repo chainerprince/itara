@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # original one-page-at-a-time path; more lets vLLM batch them (see memory/compress.py).
     ingest_concurrency: int = 1
 
+    # A learned gate saved by eval/learn_gate.py (JSON). Empty: the rule-based gate.
+    gate_path: str = ""
+
     # Optional sqlite file that stores every model response, so repeated experiments don't
     # call the model again (eval only; see gateway/llm.py).
     model_cache: str = ""

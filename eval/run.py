@@ -7,8 +7,10 @@
     uv run python -m eval.run replay   --baseline no_sharing --users 1,2,4 --per-user 2
 
 Baselines: muse_direct (no gateway, raw context to Muse), escalate_compact (always escalate
-with memory summaries), llama_only (never escalate), rule_gate (the gateway as it is),
-no_sharing (replay only: no shared memory or cache), full (the learned gate, day 7).
+with memory summaries), escalate_raw (always escalate with the raw pages behind them),
+llama_only (never escalate), rule_gate (the gateway with the rule-based gate), no_sharing
+(replay only: no shared memory or cache), full (the learned gate live, with GATE_PATH set;
+its measured numbers come from eval/learn_gate.py, which replays it offline).
 
 Results are appended item by item to eval/results/raw/<bench>_<baseline>_<run_id>.jsonl,
 so a run can be stopped and resumed with --resume <run_id>. Each run uses its own user id

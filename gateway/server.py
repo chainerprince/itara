@@ -25,7 +25,8 @@ from cache.lmcache import scoped_body, with_memory
 from gateway.accounting import Ledger, SpendCapExceeded
 from gateway.auth import Principal, Principals
 from gateway.config import Settings
-from gateway.gate import ESCALATIONS, Route, has_tools, rule_gate
+from gateway.gate import (ESCALATIONS, LearnedGate, Route, estimated_prompt_tokens,
+                          gate_features, has_tools, rule_gate)
 from gateway.llm import ChatClient
 from memory.compress import ingest
 from memory.store import MemoryStore, default_embedder
@@ -41,6 +42,7 @@ class Services:
     llama_backend: str = "ollama"
     muse_is_standin: bool = False
     ingest_concurrency: int = 1
+    gate: LearnedGate | None = None  # None: the rule-based gate
     # One limit for the whole process, so concurrent ingests can't multiply it.
     ingest_limit: asyncio.Semaphore | None = field(init=False, default=None)
 
@@ -64,6 +66,7 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
         ingest_concurrency=settings.ingest_concurrency,
+        gate=LearnedGate.load(settings.gate_path) if settings.gate_path else None,
     )
     return services, pool
 
@@ -167,21 +170,9 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def models():
         return {"object": "list", "data": [{"id": "memory-gateway", "object": "model"}]}
 
-    @app.post("/v1/chat/completions")
-    async def chat_completions(request: Request):
-        s: Services = request.app.state.services
-        principal = await principal_of(request)
-        scope = principal.scope
-        body = await request.json()
-        if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
-            raise HTTPException(400, "Request body needs a messages list")
-
-        if has_tools(body):
-            route, memories = Route.PASSTHROUGH, []
-        else:
-            question = last_user_text(body["messages"])
-            hits = await s.store.search(scope, question)
-            route = route_override(request, principal) or rule_gate(question, hits)
+    async def answer(s: Services, scope, route: Route, body: dict, hits: list) -> dict:
+        """Send the request down one route, with its memory, and record the usage."""
+        if route != Route.PASSTHROUGH:
             if route == Route.ESCALATE_RAW:
                 memories = await s.store.pages(scope, [h.id for h in hits])
             elif route in (Route.LOCAL_MEMORY, Route.ESCALATE_COMPACT):
@@ -205,6 +196,42 @@ def create_app(services: Services | None = None) -> FastAPI:
                 latency_ms = int((time.monotonic() - start) * 1000)
             await s.ledger.record(scope, client.model, route, response.get("usage", {}),
                                   latency_ms, paid=paid, estimate_usd=estimate)
+        return response
+
+    async def learned_route(s: Services, scope, question: str, hits: list, draft: dict) -> Route:
+        text = draft["choices"][0]["message"].get("content") or ""
+        vectors = await s.store.embed([question, text, *(h.content for h in hits)])
+        pages = (await s.store.pages(scope, [h.id for h in hits])
+                 if Route.ESCALATE_RAW in s.gate.routes else [])
+        probabilities = s.gate.probabilities(gate_features(question, hits, text, vectors))
+        costs = s.gate.costs(estimated_prompt_tokens(question, hits, pages), s.ledger.cost)
+        return s.gate.decide(probabilities, costs)
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(request: Request):
+        s: Services = request.app.state.services
+        principal = await principal_of(request)
+        scope = principal.scope
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
+            raise HTTPException(400, "Request body needs a messages list")
+
+        if has_tools(body):
+            route = Route.PASSTHROUGH
+            response = await answer(s, scope, route, body, [])
+        else:
+            question = last_user_text(body["messages"])
+            hits = await s.store.search(scope, question)
+            route = route_override(request, principal)
+            if route is None and s.gate is not None:
+                # Cascade: Llama drafts with memory; the gate keeps the draft or escalates.
+                response = await answer(s, scope, Route.LOCAL_MEMORY, body, hits)
+                route = await learned_route(s, scope, question, hits, response)
+                if route != Route.LOCAL_MEMORY:
+                    response = await answer(s, scope, route, body, hits)
+            else:
+                route = route or rule_gate(question, hits)
+                response = await answer(s, scope, route, body, hits)
 
         headers = {"X-Gateway-Route": route.value}
         if body.get("stream"):

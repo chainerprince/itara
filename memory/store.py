@@ -99,6 +99,9 @@ class MemoryStore:
             )
             yield conn
 
+    async def embed(self, texts: list[str]) -> list[np.ndarray]:
+        return await self._vectors(texts)
+
     async def _vectors(self, texts: list[str]) -> list[np.ndarray]:
         vectors = await asyncio.to_thread(self._embed, texts)
         return [np.array(v, dtype=np.float32) for v in vectors]

@@ -6,6 +6,7 @@ from gateway.auth import Principals
 from gateway.server import Services, create_app
 from memory.store import MemoryStore, Scope
 from tests.conftest import FakeModel, fake_embed
+from tests.test_gate import constant_gate
 
 
 def bearer(key):
@@ -151,3 +152,18 @@ async def test_upstream_auth_failure_is_502(gateway):
 
     services.llama.chat = unauthorized
     assert (await client.post("/v1/chat/completions", json=chat("hi"))).status_code == 502
+
+
+async def test_learned_gate_keeps_the_draft_or_escalates(gateway):
+    client, services = gateway
+    for p_local, route, model in ((0.9, "local_memory", "llama"), (0.1, "escalate_compact", "muse")):
+        services.gate = constant_gate(p_local, 0.8)
+        services.llama.requests.clear()
+        services.muse.requests.clear()
+        r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
+        assert r.headers["x-gateway-route"] == route and r.json()["model"] == model
+        assert len(services.llama.requests) == 1  # Llama always drafts first
+        assert len(services.muse.requests) == (model == "muse")
+    r = await client.post("/v1/chat/completions", json=chat("deploy"),  # an override skips the gate
+                          headers={**services.keys["admin"], "X-Gateway-Route": "escalate_raw"})
+    assert r.headers["x-gateway-route"] == "escalate_raw"
