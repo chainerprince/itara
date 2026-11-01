@@ -25,8 +25,9 @@ from cache.lmcache import scoped_body, with_memory
 from gateway.accounting import Ledger, SpendCapExceeded
 from gateway.auth import Principal, Principals
 from gateway.config import Settings
-from gateway.gate import (ESCALATIONS, LearnedGate, Route, estimated_prompt_tokens,
-                          gate_features, has_tools, rule_gate)
+from gateway.gate import (ESCALATIONS, FEATURES, CascadeGate, LearnedGate, Route,
+                          draft_confidence, estimated_prompt_tokens, gate_features, has_tools,
+                          load_gate, rule_gate)
 from gateway.llm import ChatClient
 from memory.compress import ingest
 from memory.store import MemoryStore, default_embedder
@@ -42,7 +43,7 @@ class Services:
     llama_backend: str = "ollama"
     muse_is_standin: bool = False
     ingest_concurrency: int = 1
-    gate: LearnedGate | None = None  # None: the rule-based gate
+    gate: LearnedGate | CascadeGate | None = None  # None: the rule-based gate
     # One limit for the whole process, so concurrent ingests can't multiply it.
     ingest_limit: asyncio.Semaphore | None = field(init=False, default=None)
 
@@ -61,13 +62,17 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
                          cache_path=settings.model_cache),
         muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model,
-                        cache_path=settings.model_cache),
+                        cache_path=settings.model_cache,
+                        defaults=({"reasoning_effort": settings.muse_reasoning_effort}
+                                  if settings.muse_reasoning_effort else None)),
         principals=Principals(pool),
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
         ingest_concurrency=settings.ingest_concurrency,
-        gate=LearnedGate.load(settings.gate_path) if settings.gate_path else None,
+        gate=load_gate(settings.gate_path) if settings.gate_path else None,
     )
+    if isinstance(services.gate, CascadeGate) and settings.gate_threshold is not None:
+        services.gate.threshold = settings.gate_threshold
     return services, pool
 
 
@@ -170,20 +175,26 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def models():
         return {"object": "list", "data": [{"id": "memory-gateway", "object": "model"}]}
 
+    async def prepare(s: Services, scope, route: Route, body: dict, hits: list) -> dict:
+        """The request as the route's model gets it: with its memory (and cache scope)."""
+        if route == Route.PASSTHROUGH:
+            return body
+        if route == Route.ESCALATE_RAW:
+            memories = await s.store.pages(scope, [h.id for h in hits])
+        elif route in (Route.LOCAL_MEMORY, Route.ESCALATE_COMPACT):
+            memories = hits
+        else:
+            memories = []
+        if route in ESCALATIONS:  # Muse gets memory but never the cache scope
+            return {**body, "messages": with_memory(body["messages"], memories)}
+        return scoped_body(body, scope, memories, s.llama_backend)
+
     async def answer(s: Services, scope, route: Route, body: dict, hits: list) -> dict:
         """Send the request down one route, with its memory, and record the usage."""
-        if route != Route.PASSTHROUGH:
-            if route == Route.ESCALATE_RAW:
-                memories = await s.store.pages(scope, [h.id for h in hits])
-            elif route in (Route.LOCAL_MEMORY, Route.ESCALATE_COMPACT):
-                memories = hits
-            else:
-                memories = []
-            if route in ESCALATIONS:  # Muse gets memory but never the cache scope
-                body = {**body, "messages": with_memory(body["messages"], memories)}
-            else:
-                body = scoped_body(body, scope, memories, s.llama_backend)
+        return await send(s, scope, route, await prepare(s, scope, route, body, hits))
 
+    async def send(s: Services, scope, route: str, body: dict) -> dict:
+        """Call the route's model with a prepared request and record the usage."""
         paid = route in ESCALATIONS
         client = s.muse if paid else s.llama
         estimate = s.ledger.worst_case_cost(body) if paid else 0.0
@@ -198,12 +209,22 @@ def create_app(services: Services | None = None) -> FastAPI:
                                   latency_ms, paid=paid, estimate_usd=estimate)
         return response
 
-    async def learned_route(s: Services, scope, question: str, hits: list, draft: dict) -> Route:
+    async def learned_route(s: Services, scope, question: str, hits: list, local: dict,
+                            draft: dict) -> Route:
+        """`local`: the draft's request as sent; `draft`: Llama's answer to it."""
         text = draft["choices"][0]["message"].get("content") or ""
-        vectors = await s.store.embed([question, text, *(h.content for h in hits)])
+        features = {}
+        if any(f in FEATURES for f in s.gate.features):
+            vectors = await s.store.embed([question, text, *(h.content for h in hits)])
+            features = gate_features(question, hits, text, vectors)
+        if s.gate.needs_confidence:  # local GPU work, recorded as its own route
+            features |= await draft_confidence(lambda b: send(s, scope, "gate_probe", b),
+                                               s.store.embed, local, draft)
+        if isinstance(s.gate, CascadeGate):
+            return s.gate.decide(s.gate.p_right(features), hits)
         pages = (await s.store.pages(scope, [h.id for h in hits])
                  if Route.ESCALATE_RAW in s.gate.routes else [])
-        probabilities = s.gate.probabilities(gate_features(question, hits, text, vectors))
+        probabilities = s.gate.probabilities(features)
         costs = s.gate.costs(estimated_prompt_tokens(question, hits, pages), s.ledger.cost)
         return s.gate.decide(probabilities, costs)
 
@@ -225,15 +246,23 @@ def create_app(services: Services | None = None) -> FastAPI:
             route = route_override(request, principal)
             if route is None and s.gate is not None:
                 # Cascade: Llama drafts with memory; the gate keeps the draft or escalates.
-                response = await answer(s, scope, Route.LOCAL_MEMORY, body, hits)
-                route = await learned_route(s, scope, question, hits, response)
+                local = await prepare(s, scope, Route.LOCAL_MEMORY, body, hits)
+                logprobs = s.gate.needs_confidence and not body.get("logprobs")
+                response = await send(s, scope, Route.LOCAL_MEMORY,
+                                      {**local, "logprobs": True} if logprobs else local)
+                route = await learned_route(s, scope, question, hits, local, response)
                 if route != Route.LOCAL_MEMORY:
                     response = await answer(s, scope, route, body, hits)
+                elif logprobs:  # asked for the gate, not by the caller
+                    for choice in response.get("choices", []):
+                        choice.pop("logprobs", None)
             else:
                 route = route or rule_gate(question, hits)
                 response = await answer(s, scope, route, body, hits)
 
         headers = {"X-Gateway-Route": route.value}
+        if route != Route.PASSTHROUGH:  # how much team memory the answer drew on
+            headers["X-Gateway-Memory-Hits"] = str(len(hits))
         if body.get("stream"):
             sse = as_sse(response)
             sse.headers.update(headers)

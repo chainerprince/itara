@@ -6,6 +6,7 @@ from gateway.auth import Principals
 from gateway.server import Services, create_app
 from memory.store import MemoryStore, Scope
 from tests.conftest import FakeModel, fake_embed
+from gateway.gate import CONFIDENCE_FEATURES, FEATURES, CascadeGate
 from tests.test_gate import constant_gate
 
 
@@ -63,6 +64,7 @@ async def test_easy_question_with_memory_stays_local(gateway):
     r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
     assert r.status_code == 200
     assert r.headers["x-gateway-route"] == "local_memory"
+    assert int(r.headers["x-gateway-memory-hits"]) >= 1  # the shared database keeps earlier tests' memory
     assert r.json()["model"] == "llama"
     assert "Vercel" in services.llama.requests[0]["messages"][0]["content"]
     assert services.muse.requests == []
@@ -154,6 +156,34 @@ async def test_upstream_auth_failure_is_502(gateway):
     assert (await client.post("/v1/chat/completions", json=chat("hi"))).status_code == 502
 
 
+class LogprobModel(FakeModel):
+    """Returns token logprobs when asked, as vLLM does."""
+
+    async def chat(self, body):
+        response = await super().chat(body)
+        if body.get("logprobs"):
+            response["choices"][0]["logprobs"] = {"content": [
+                {"token": "yes", "logprob": -0.1, "top_logprobs": [{"token": "yes", "logprob": -0.1}]}]}
+        return response
+
+
+async def test_gate_with_confidence_probes_the_draft(gateway, pool):
+    client, services = gateway
+    services.llama = LogprobModel("llama")
+    services.gate = constant_gate(0.9, 0.8, features=FEATURES + CONFIDENCE_FEATURES)
+    r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
+    assert r.headers["x-gateway-route"] == "local_memory"
+    assert "logprobs" not in r.json()["choices"][0]  # asked for by the gate, not the caller
+    draft, *probes = services.llama.requests
+    assert draft["logprobs"] is True and len(probes) == 2
+    assert all(p["messages"][0] == draft["messages"][0] for p in probes)  # the same cached prefix
+    assert all(p.get("cache_salt") == draft.get("cache_salt") for p in probes)
+    async with pool.connection() as conn:
+        routes = [row[0] for row in await (await conn.execute(
+            "SELECT route FROM usage ORDER BY id")).fetchall()]
+    assert routes == ["local_memory", "gate_probe", "gate_probe"]
+
+
 async def test_learned_gate_keeps_the_draft_or_escalates(gateway):
     client, services = gateway
     for p_local, route, model in ((0.9, "local_memory", "llama"), (0.1, "escalate_compact", "muse")):
@@ -167,3 +197,18 @@ async def test_learned_gate_keeps_the_draft_or_escalates(gateway):
     r = await client.post("/v1/chat/completions", json=chat("deploy"),  # an override skips the gate
                           headers={**services.keys["admin"], "X-Gateway-Route": "escalate_raw"})
     assert r.headers["x-gateway-route"] == "escalate_raw"
+
+
+async def test_cascade_gate_escalates_an_unsure_draft_with_raw_pages(gateway):
+    client, services = gateway
+    services.llama = LogprobModel("llama")
+    zeros = [0.0] * len(CONFIDENCE_FEATURES)
+    for threshold, route in ((0.4, "local_memory"), (0.6, "escalate_raw")):  # P(draft right) 0.5
+        services.gate = CascadeGate(mean=zeros, scale=[1.0] * len(zeros), weights=[*zeros, 0.0],
+                                    threshold=threshold)
+        services.llama.requests.clear()
+        services.muse.requests.clear()
+        r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
+        assert r.headers["x-gateway-route"] == route
+        assert len(services.llama.requests) == 3  # the draft and its two probes
+    assert "vercel.json" in services.muse.requests[0]["messages"][0]["content"]  # deploy.md: raw

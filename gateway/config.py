@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     muse_output_price_per_m: float = 0.0
     # True while "Muse" is a local open model; reported with every usage and eval number.
     muse_is_standin: bool = False
+    # Muse's reasoning effort (e.g. minimal, low) for every request sent to it that doesn't set
+    # its own: escalations, tool-call passthrough and eval's muse_direct. Empty: Muse's default.
+    # Reasoning is most of an escalation's Muse tokens (eval/full_results.ipynb, section 3).
+    muse_reasoning_effort: str = ""
 
     spend_cap_usd: float = 150.0
 
@@ -33,6 +37,9 @@ class Settings(BaseSettings):
 
     # A learned gate saved by eval/learn_gate.py (JSON). Empty: the rule-based gate.
     gate_path: str = ""
+    # The cascade gate's threshold on P(draft right), instead of the saved one: higher
+    # escalates more. eval/learn_gate.py prints the threshold for each budget.
+    gate_threshold: float | None = None
 
     # Optional sqlite file that stores every model response, so repeated experiments don't
     # call the model again (eval only; see gateway/llm.py).

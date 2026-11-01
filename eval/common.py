@@ -252,8 +252,9 @@ class Harness:
 
     def labels(self) -> dict:
         s = self.services
+        effort = getattr(s.muse, "defaults", {}).get("reasoning_effort", "")  # "": Muse's default
         return {"llama_model": s.llama.model, "muse_model": s.muse.model,
-                "muse_is_standin": s.muse_is_standin,
+                "muse_is_standin": s.muse_is_standin, "muse_reasoning_effort": effort,
                 "simulated": s.llama.model.startswith("sim-"),
                 "ingest_concurrency": s.ingest_concurrency,
                 "answer_temperature": ANSWER_TEMPERATURE,

@@ -26,8 +26,10 @@ class ChatClient:
         model: str,
         timeout: float = 600.0,
         cache_path: str = "",
+        defaults: dict | None = None,
     ) -> None:
         self.model = model
+        self.defaults = defaults or {}  # sent with every request unless the request sets them
         self.replayed = 0
         self._base_url = base_url
         self._http = httpx.AsyncClient(
@@ -47,7 +49,7 @@ class ChatClient:
 
     async def chat(self, body: dict) -> dict:
         """Send a chat completion request (never streamed) and return the response JSON."""
-        body = {**body, "model": self.model, "stream": False}
+        body = {**self.defaults, **body, "model": self.model, "stream": False}
         body.pop("stream_options", None)
         key = None
         if self._cache is not None:
