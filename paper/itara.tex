@@ -193,6 +193,32 @@ The open model's confidence is informative (Table~\ref{tab:auc}). The strongest 
 
 Two upper bounds show why 10\% is out of reach for any gate that judges only the draft. A perfect draft check, escalating exactly the wrong drafts, would score \perfectSwe\% on code but costs \perfectShareSwe\% of the tokens. The questions a good gate escalates are the expensive ones: the closed model writes \escTokWrongSwe{} tokens on questions the open model got wrong against \escTokRightSwe{} on those it got right. Only the oracle passes on code (\accSweOracle\% at \shareSweOracle\%), because it also knows when the closed model will fail.
 
+\subsection{What a question costs}
+\label{sec:cost}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\caption{What 1{,}000 code questions cost, closed-model tokens and GPU time together, on the same 300 SWE-bench Lite issues; latency is per question. Prices: Muse's list prices; an H100 at \$\hundredRate{} an hour, charged as if each request had it alone; the memory build included. Raw pages: Muse given the pages behind the retrieved memories, without summaries. Random: as many escalations as the cascade at 10\%, mean of 1{,}000 draws. $^\dagger$Budget chosen after the run.}
+\label{tab:cost}
+\begin{tabular}{lrrrr}
+\toprule
+Option & Acc.\,(\%) & \$/1k & \$/1k right & Median\,(s)\\
+\midrule
+\rows{tab_cost.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+Token shares leave out two costs: the GPU that runs the open model, and the time a user waits. Table~\ref{tab:cost} prices each option on the same 300 code questions, from the saved answers; we added this analysis after the run, and it calls no model. Muse is charged its exact tokens at list price. The GPU is charged at Modal's listed H100 rate for each request's open-model time, as if the request had the GPU to itself, which overstates it: the deployment serves up to 32 requests at once. The cascade's confidence calls were not timed and are charged the draft's time again. Every option that reads the memory also pays for building it: \buildMinutesSwe{} minutes of H100 time for these issues, \$\buildUsdSwe{} per thousand questions, which a team asking more questions of the same code pays once.
+
+Compression does most of the work. Team memory cuts the cost per question by \dropMemory\% at the same accuracy, and answers slightly sooner. The cascade cuts a further \dropCascadeMemory\% (\dropCascade\% in all), and its median answer arrives in \medCascade\,s instead of \medMemory\,s because most questions never leave the GPU; at this budget it scores \cascadeSwe\% against \accSweCompact\%. Per correct answer it costs a little less than memory alone (\$\usdOkCascade{} against \$\usdOkMemory{} per thousand), and at a 20\% budget it costs more than memory alone and is less accurate. Escalating the same number of questions at random is cheaper still but scores \accRandomCount\% against the cascade's \cascadeSwe\%; the cascade pays for that difference with its confidence calls.
+
+The simpler alternatives are close on code. Muse given raw pages, without summaries, costs \$\usdRaw{} per thousand for \accSweRaw\%: once the closed model reasons for thousands of tokens per answer, shortening its prompt further saves little. Our raw-page route retrieves through the memory index; a retriever that indexed raw pages directly would skip the build and cost about as much as team memory, and we did not test one. The rule gate costs about the same as memory alone and is less accurate (\accSweRule\% against \accSweCompact\%). Two caveats cut the other way. The two runaway answers inflate the reference: without them it costs \$\usdDirectNoRunaway{} per thousand. And on conversations Muse's own API served \museCachedLoco\% of the full-context prompt from its cache; we price those tokens in full, so a provider discount on cached input would make the reference cheaper than the \$\usdLocoDirect{} per thousand we show (against \$\usdLocoRaw{} for raw pages and \$\usdLocoCascade{} for the cascade).
+
+In short, team memory justifies itself on cost alone. The cascade, with an 8B open model, earns its complexity through latency and a lower bill, at some cost in accuracy; it should earn more as the open model answers more questions correctly (Section~\ref{sec:discussion}).
+
 \subsection{Sharing across a team}
 
 \begin{figure}[t]
@@ -268,6 +294,7 @@ Because the closed model's output dominates escalation cost, we reran every clos
 \item \textbf{Benchmark leniency.} Code localisation on well-known repositories rewards prior knowledge (the reference is often right without seeing the file).
 \item \textbf{Post-hoc choices} (budgets, reasoning effort) are reported separately and with intervals, but they were made after seeing results. Choosing the operating point from a sweep on the same items is a mild selection; our nested check suggests it is small here.
 \item \textbf{Sample size.} With 300 items per benchmark, intervals on gaps are about $\pm$3 points.
+\item \textbf{The cost model} is ours: list prices, an H100 charged per request as if unshared, the confidence calls' time estimated rather than measured, and no discount for the closed model's own cached input. We compare against simpler compression and routing (raw pages, a rule gate, random escalation) but not against an off-the-shelf prompt compressor~\citep{jiang2023llmlingua}, a trained router~\citep{ong2025routellm}, or plain retrieval over raw pages.
 \item \textbf{Cache scope.} We tested scope-keyed prefix caching on one server; cross-server sharing (LMCache) was not evaluated.
 \end{itemize}
 

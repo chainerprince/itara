@@ -38,6 +38,7 @@ All of this is explained, with intervals, in the notebook and the paper.
 | `replay_<baseline>_<order>_<timestamp>.csv` | Team replay: per-engineer cost at 1–16 engineers (`rule_gate` = one team sharing; `no_sharing` = everyone alone). |
 | `handcheck_locomo_full1.csv` | 50 LoCoMo judge verdicts checked by hand (48 agree). |
 | `effort_check_full1-minimal.json` | Intervals for the minimal-effort result (`eval/effort_check.py`). |
+| `cost_compare_full1.json` | Dollars (Muse and GPU) and latency per question for each option, including simpler alternatives (`eval/cost_compare.py`). |
 
 **Run ids:**
 - `full1`: the full run. `full1-minimal`: the same with Muse at minimal effort, chosen after the run.
@@ -51,6 +52,7 @@ Only real-model runs are committed. Simulated runs (`sim1`) and stand-in runs st
 ```bash
 uv run python -m eval.learn_gate --id full1 -n 300      # gates (needs the run's database)
 uv run python -m eval.effort_check                      # minimal-effort intervals (same)
+uv run python -m eval.cost_compare                      # cost per question (same)
 uv run python -m scripts.dashboard_data                 # the dashboard's numbers
 uv run python paper/generate.py                         # the paper's tables and figures
 uv run jupyter nbconvert --execute --to notebook --inplace results/full_run.ipynb

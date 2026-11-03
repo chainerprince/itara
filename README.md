@@ -70,6 +70,23 @@ Measured on the real models: Llama 3.1 8B on vLLM (a Modal H100) and Muse Spark 
 - **The gate's signal is real.** Llama's confidence separates its right drafts from wrong ones with an AUC of 0.68 on code and 0.80 on conversations. At 10% of the tokens, the cascade beats escalating at random by 5 points on code.
 - **What was decided after the run.** The 10% north star is the only budget set in advance; the 20% and 25% budgets were chosen after seeing the results. A follow-up at Muse's minimal reasoning effort, also chosen after the run, comes within about 2 points on code at 10% of the tokens, but its 95% interval includes misses of up to 5 points (section 10 of the notebook).
 
+**What a question costs, all in.** The same 300 code questions, priced with the GPU and latency included ([`eval/cost_compare.py`](eval/cost_compare.py), from the saved answers; added after the run):
+
+| Per 1,000 code questions | Accuracy | Cost | Cost per 1,000 right | Median wait |
+|---|---|---|---|---|
+| Muse with the full context | 86.0% | $37.09 | $43.12 | 12.2 s |
+| Muse with retrieved raw pages (no compression) | 87.0% | $18.23 | $20.96 | 9.9 s |
+| **Muse with team memory** | **86.3%** | **$16.11** | **$18.66** | 9.8 s |
+| Rule gate (hand-written routing) | 82.7% | $15.25 | $18.45 | 8.6 s |
+| **Itara cascade, 10% budget** | 74.0% | **$11.87** | **$16.04** | **2.3 s** |
+| Random escalation, same number of questions | 67.5% | $9.56 | $14.18 | 1.1 s |
+
+Cost is Muse at its list prices plus the H100 at Modal's $3.95 an hour, including the 13 minutes it took to build the memory. Each request is charged as if it had the GPU to itself, which overstates the GPU share.
+
+- **Team memory pays for itself on cost alone:** 57% cheaper than the full context, at the same accuracy.
+- **The cascade adds speed:** 61% of questions never leave the GPU, so the median answer takes 2.3 s instead of 9.8 s, and the bill falls another 26%. At this budget it gives up accuracy (74.0% against 86.3%), and at 20% it costs more than memory alone. With an 8B model, routing is worth it for latency and spend, not accuracy; a stronger open model makes it worth more.
+- **Simpler options are close on code.** Raw pages without summaries cost only a little more, because Muse's reasoning, not its prompt, is most of the bill. And the full-context price includes two runaway answers; without them it is $29.75. The paper lists what we haven't compared against yet.
+
 **Long conversations are harder, and the reason is retrieval.** Itara reaches 62.7% against Muse's 87.0% with the full conversation. Its memory search misses the right session for 37% of questions. When it finds that session, Muse with the raw pages scores 85.3%.
 
 **Sharing pays off as the team grows.** In replays of 1 to 16 engineers on one repo, the gateway's ingest work per engineer falls **35%** with shared memory at 16 engineers, against 13% without sharing (related tasks; on random tasks, 7% vs 1%). A teammate's request reused **6,144** cached prompt tokens; someone on another team reused **0**.
