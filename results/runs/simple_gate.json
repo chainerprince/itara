@@ -1,0 +1,585 @@
+{
+  "budgets": [
+    0.1,
+    0.2
+  ],
+  "resamples": 4000,
+  "runs": {
+    "full1": {
+      "label": "Llama 3.1 8B",
+      "items": 300,
+      "draft_right": 0.5566666666666666,
+      "muse_direct": 0.86,
+      "gates": {
+        "cascade (6 signals, shipped)": {
+          "features": [
+            "draft_logprob_mean",
+            "draft_logprob_min",
+            "draft_unlikely_share",
+            "self_check",
+            "sample_agreement",
+            "sample_same_answer"
+          ],
+          "auc": 0.6766467065868264,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7433333333333333,
+              "share": 0.09824447737257513,
+              "kept": 0.6033333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.73,
+              "share": 0.09566228535891329,
+              "kept": 0.62
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                0.0,
+                0.0
+              ],
+              "p_better": 0.0
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8266666666666667,
+              "share": 0.19839965285484892,
+              "kept": 0.17333333333333334
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8266666666666667,
+              "share": 0.19861261920616544,
+              "kept": 0.17666666666666664
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                0.0,
+                0.0
+              ],
+              "p_better": 0.0
+            }
+          }
+        },
+        "self-check, raw (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.612219170681194,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.68,
+              "share": 0.09869860562031199,
+              "kept": 0.6333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.6766666666666666,
+              "share": 0.09931190871842249,
+              "kept": 0.63
+            },
+            "vs_cascade": {
+              "points": -0.06333333333333324,
+              "interval": [
+                -0.10999999999999999,
+                -0.019916666666666274
+              ],
+              "p_better": 0.00125
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8233333333333334,
+              "share": 0.19758298188886156,
+              "kept": 0.17333333333333334
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.82,
+              "share": 0.19071026777769112,
+              "kept": 0.19999999999999996
+            },
+            "vs_cascade": {
+              "points": -0.0033333333333332993,
+              "interval": [
+                -0.026666666666666727,
+                0.020000000000000018
+              ],
+              "p_better": 0.3405
+            }
+          }
+        },
+        "self-check + 1 if second opinion agrees (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.7029850074287515,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7533333333333333,
+              "share": 0.09934630328408112,
+              "kept": 0.6233333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7533333333333333,
+              "share": 0.09760517838181568,
+              "kept": 0.63
+            },
+            "vs_cascade": {
+              "points": 0.010000000000000009,
+              "interval": [
+                -0.026666666666666727,
+                0.046750000000000375
+              ],
+              "p_better": 0.6795
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8366666666666667,
+              "share": 0.19910794094533063,
+              "kept": 0.16333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8366666666666667,
+              "share": 0.19506757932246704,
+              "kept": 0.18666666666666665
+            },
+            "vs_cascade": {
+              "points": 0.010000000000000009,
+              "interval": [
+                -0.010000000000000009,
+                0.033333333333333326
+              ],
+              "p_better": 0.76525
+            }
+          }
+        },
+        "self-check": {
+          "features": [
+            "self_check"
+          ],
+          "auc": 0.5024537391382649,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.6733333333333333,
+              "share": 0.09996920486563123,
+              "kept": 0.5833333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.65,
+              "share": 0.09346703220891099,
+              "kept": 0.6133333333333333
+            },
+            "vs_cascade": {
+              "points": -0.06999999999999995,
+              "interval": [
+                -0.1133333333333334,
+                -0.026666666666666616
+              ],
+              "p_better": 0.0005
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.82,
+              "share": 0.19906974697997717,
+              "kept": 0.16333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8266666666666667,
+              "share": 0.20213586253371968,
+              "kept": 0.1466666666666666
+            },
+            "vs_cascade": {
+              "points": -0.00666666666666671,
+              "interval": [
+                -0.030000000000000027,
+                0.016666666666666607
+              ],
+              "p_better": 0.2345
+            }
+          }
+        },
+        "self-check + files named": {
+          "features": [
+            "self_check",
+            "files_named"
+          ],
+          "auc": 0.5001125568412048,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.67,
+              "share": 0.0990813451474667,
+              "kept": 0.5866666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.6466666666666666,
+              "share": 0.09095242951613645,
+              "kept": 0.6166666666666667
+            },
+            "vs_cascade": {
+              "points": -0.07333333333333325,
+              "interval": [
+                -0.11675,
+                -0.030000000000000027
+              ],
+              "p_better": 0.00025
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.82,
+              "share": 0.19989121718768435,
+              "kept": 0.15666666666666662
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8233333333333334,
+              "share": 0.20180671453910282,
+              "kept": 0.1466666666666666
+            },
+            "vs_cascade": {
+              "points": -0.00666666666666671,
+              "interval": [
+                -0.030000000000000027,
+                0.016666666666666607
+              ],
+              "p_better": 0.24525
+            }
+          }
+        },
+        "self-check + files named + second opinion": {
+          "features": [
+            "self_check",
+            "files_named",
+            "second_opinion_agrees"
+          ],
+          "auc": 0.6522894061501058,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7533333333333333,
+              "share": 0.09776455320059431,
+              "kept": 0.6266666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7533333333333333,
+              "share": 0.09990601484965375,
+              "kept": 0.62
+            },
+            "vs_cascade": {
+              "points": 0.010000000000000009,
+              "interval": [
+                -0.030000000000000027,
+                0.04999999999999993
+              ],
+              "p_better": 0.666
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8233333333333334,
+              "share": 0.1992043257165368,
+              "kept": 0.17000000000000004
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8166666666666667,
+              "share": 0.1886705900467726,
+              "kept": 0.21333333333333337
+            },
+            "vs_cascade": {
+              "points": -0.0033333333333332993,
+              "interval": [
+                -0.026666666666666727,
+                0.020000000000000018
+              ],
+              "p_better": 0.32725
+            }
+          }
+        }
+      }
+    },
+    "big1": {
+      "label": "Llama 3.3 70B",
+      "items": 300,
+      "draft_right": 0.67,
+      "muse_direct": 0.86,
+      "gates": {
+        "cascade (6 signals, shipped)": {
+          "features": [
+            "draft_logprob_mean",
+            "draft_logprob_min",
+            "draft_unlikely_share",
+            "self_check",
+            "sample_agreement",
+            "sample_same_answer"
+          ],
+          "auc": 0.5756068144127846,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7766666666666666,
+              "share": 0.09689149114439918,
+              "kept": 0.5966666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7833333333333333,
+              "share": 0.10640258839103421,
+              "kept": 0.5633333333333334
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                0.0,
+                0.0
+              ],
+              "p_better": 0.0
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8566666666666667,
+              "share": 0.17061764241249883,
+              "kept": 0.2633333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.16950281855466837,
+              "kept": 0.2666666666666667
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                0.0,
+                0.0
+              ],
+              "p_better": 0.0
+            }
+          }
+        },
+        "self-check, raw (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.693954470073873,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8,
+              "share": 0.08998678208843003,
+              "kept": 0.6333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7933333333333333,
+              "share": 0.08506975897808146,
+              "kept": 0.65
+            },
+            "vs_cascade": {
+              "points": 0.023333333333333428,
+              "interval": [
+                -0.016666666666666607,
+                0.06333333333333335
+              ],
+              "p_better": 0.86625
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8566666666666667,
+              "share": 0.18964623589472862,
+              "kept": 0.18333333333333335
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8366666666666667,
+              "share": 0.15441200290354123,
+              "kept": 0.32333333333333336
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                -0.023333333333333317,
+                0.023333333333333317
+              ],
+              "p_better": 0.44225
+            }
+          }
+        },
+        "self-check + 1 if second opinion agrees (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.7108397406904869,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.81,
+              "share": 0.09837925607753975,
+              "kept": 0.6266666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8033333333333333,
+              "share": 0.08453164400024796,
+              "kept": 0.6699999999999999
+            },
+            "vs_cascade": {
+              "points": 0.03333333333333344,
+              "interval": [
+                -0.0033333333333332993,
+                0.07000000000000006
+              ],
+              "p_better": 0.951
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.86,
+              "share": 0.18126096076819861,
+              "kept": 0.22333333333333338
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8466666666666667,
+              "share": 0.1646079919372739,
+              "kept": 0.2833333333333333
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333332993,
+              "interval": [
+                -0.020000000000000018,
+                0.026666666666666727
+              ],
+              "p_better": 0.55775
+            }
+          }
+        },
+        "self-check": {
+          "features": [
+            "self_check"
+          ],
+          "auc": 0.4854012764460526,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.73,
+              "share": 0.09678050867962862,
+              "kept": 0.5766666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7266666666666667,
+              "share": 0.10002199652454911,
+              "kept": 0.5666666666666667
+            },
+            "vs_cascade": {
+              "points": -0.046666666666666634,
+              "interval": [
+                -0.08333333333333337,
+                -0.010000000000000009
+              ],
+              "p_better": 0.00575
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.1873667960462247,
+              "kept": 0.19999999999999996
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.85,
+              "share": 0.1950643798279872,
+              "kept": 0.16666666666666663
+            },
+            "vs_cascade": {
+              "points": -0.0033333333333332993,
+              "interval": [
+                -0.023333333333333428,
+                0.01999999999999991
+              ],
+              "p_better": 0.31825
+            }
+          }
+        },
+        "self-check + files named": {
+          "features": [
+            "self_check",
+            "files_named"
+          ],
+          "auc": 0.523543896678225,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.72,
+              "share": 0.09564668782332392,
+              "kept": 0.6
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7133333333333334,
+              "share": 0.08666950621801756,
+              "kept": 0.63
+            },
+            "vs_cascade": {
+              "points": -0.05666666666666664,
+              "interval": [
+                -0.09333333333333327,
+                -0.020000000000000018
+              ],
+              "p_better": 0.00075
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.18961124142385502,
+              "kept": 0.18666666666666665
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.19381557713881206,
+              "kept": 0.17000000000000004
+            },
+            "vs_cascade": {
+              "points": -0.0033333333333332993,
+              "interval": [
+                -0.023333333333333317,
+                0.01666666666666672
+              ],
+              "p_better": 0.31075
+            }
+          }
+        },
+        "self-check + files named + second opinion": {
+          "features": [
+            "self_check",
+            "files_named",
+            "second_opinion_agrees"
+          ],
+          "auc": 0.6263128800442234,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8033333333333333,
+              "share": 0.09598663411181034,
+              "kept": 0.6366666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7966666666666666,
+              "share": 0.09473283221251043,
+              "kept": 0.6433333333333333
+            },
+            "vs_cascade": {
+              "points": 0.026666666666666727,
+              "interval": [
+                -0.010000000000000009,
+                0.06333333333333335
+              ],
+              "p_better": 0.908
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.86,
+              "share": 0.19983662581312153,
+              "kept": 0.1466666666666666
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.85,
+              "share": 0.2009716464798562,
+              "kept": 0.13666666666666671
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333332993,
+              "interval": [
+                -0.016666666666666607,
+                0.023333333333333317
+              ],
+              "p_better": 0.5675
+            }
+          }
+        }
+      }
+    }
+  }
+}

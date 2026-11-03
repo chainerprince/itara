@@ -343,6 +343,22 @@ def bigger() -> None:
     macro("bigPerfect", p1(big["perfect_check"]["accuracy"]))
     macro("bigPerfectShare", p1(big["perfect_check"]["share"]))
     macro("bigAuc", f"{gate['cascade']['auc']['swebench']:.2f}")
+    simple = json.loads((RUNS / "simple_gate.json").read_text())["runs"]
+    second = "self-check + 1 if second opinion agrees (no fitting)"
+    for key, run_id in (("Small", RUN_ID), ("Big", "big1")):
+        g = simple[run_id]["gates"][second]
+        macro(f"second{key}Auc", f"{g['auc']:.2f}")
+        macro(f"second{key}Ten", p1(g["0.1"]["threshold_on_these_items"]["accuracy"]))
+        macro(f"second{key}TenNested", p1(g["0.1"]["threshold_on_other_folds"]["accuracy"]))
+        macro(f"second{key}Twenty", p1(g["0.2"]["threshold_on_these_items"]["accuracy"]))
+        v = g["0.1"]["vs_cascade"]
+        macro(f"second{key}Gain", signed(v["points"]))
+        macro(f"second{key}GainLo", signed(v["interval"][0]))
+        macro(f"second{key}GainHi", signed(v["interval"][1]))
+        macro(f"second{key}GainP", f"{100 * v['p_better']:.0f}")
+    raw = simple["big1"]["gates"]["self-check, raw (no fitting)"]
+    macro("rawSelfBigAuc", f"{raw['auc']:.2f}")
+    macro("rawSelfBigTen", p1(raw["0.1"]["threshold_on_these_items"]["accuracy"]))
     for key, run_id in (("small", RUN_ID), ("big", "big1")):
         rows = [json.loads(line) for line in (RUNS / "raw" / f"swebench_confidence_{run_id}.jsonl").open()]
         macro(f"{key}Same", f"{100 * sum(r['same_as_run'] for r in rows) / len(rows):.0f}")

@@ -20,7 +20,7 @@ Measured on all 300 SWE-bench Lite issues, with the closed model's tokens and th
 | Fast mode, 10% of Muse's tokens | 74.0% | **77.7%** (+3.7, interval −0.7 to +8.0) |
 | 20% of Muse's tokens | 82.7% | **85.7%**: within 0.3 points of Muse with the full context |
 
-The 70B runs on two H100s, so it costs more GPU time per question.
+The 70B runs on two H100s, so it costs more GPU time per question. A simpler gate that adds a second opinion (does the 8B name the same file?) takes the 70B's fast mode to 81.0% at 10%. That gate was designed after the run, so it's the next step rather than a result ([paper](paper/itara.pdf), `eval/simple_gate.py`).
 
 Itara is a self-hosted gateway that speaks the OpenAI API: any app, chat UI or coding agent uses it by changing its base URL.
 
