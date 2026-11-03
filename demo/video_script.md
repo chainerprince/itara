@@ -79,7 +79,11 @@ uv run itara dashboard
 
 **[Back up to the line under the banner, and the shaded north-star box on the chart]**
 
-> We also set a north star before the run: match Muse at a tenth of the tokens. We're not there yet: 74% on code at 10%. An 8B model is the limit; the numbers say a bigger open model and more GPUs get us there, and that's the next step. Conversations are harder: retrieval finds the right session two times in three, so that's next too.
+> We also set a north star before the run: match Muse at a tenth of the tokens. We're not there yet: 74% on code at 10% with the 8B.
+
+**[Scroll to "A bigger open model"]**
+
+> So we swapped the 8B for Llama 3.3 70B, with the same memory and the same questions. On its own it gets 67% instead of 56%. Fast mode goes from 74 to almost 78%, and at a fifth of Muse's tokens Itara comes within 0.3 points of Muse. A perfect judge of the 70B's drafts would already hit the north star, so a better judge is next. Conversations are harder: retrieval finds the right session two times in three, so that's next too.
 
 ## 2:35–3:00 · Why open weights, and how to get it
 
@@ -105,4 +109,5 @@ Don't say "it passes" or "we hit 10%". The full analysis is in `results/full_run
 
 - The numbers match `dashboard/results.json` (default effort), `results/full_run.ipynb` and the README.
 - Say "57% less" (cost with the GPU included) or "about a quarter of the tokens", not "23%": two runaway Muse answers inflate the token denominator.
+- The 70B run was added after the main run: say "we then tried", never that it was planned. Don't say it reached the north star.
 - Lead with what works, but keep "not there yet" for the north star and "chosen after the run" for the 25% point. Judges will check the numbers against the repo.
