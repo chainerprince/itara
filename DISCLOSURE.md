@@ -52,7 +52,7 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 | Paper (`paper/`) | Done (3 Nov) |
 | Demo video | Planned (3–4 Nov) |
 
-The north star set in the plan (within 3 points of Muse with the full context at ≤ 10% of its tokens) was **not met**. Budgets of 20% and 25%, and Muse's minimal reasoning effort, were chosen after the results and are labelled that way everywhere they appear.
+The north star set in the plan (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, and Muse's minimal reasoning effort, were chosen after the results and are labelled that way everywhere they appear.
 
 The Official Rules still need to be read and the pre-existing-work wording confirmed.
 

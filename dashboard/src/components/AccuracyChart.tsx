@@ -38,7 +38,7 @@ export function AccuracyChart({ bench }: { bench: Benchmark }) {
       <svg ref={svg} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`Accuracy against Muse tokens. Muse with the full context scores ${pct(md)}.`}>
         <rect x={x(0)} y={y(Y_MAX)} width={x(0.1) - x(0)} height={y(md - 0.03) - y(Y_MAX)} fill="var(--green-wash)" />
-        <text x={x(0) + 6} y={y(Y_MAX) + 14} className="ink">goal</text>
+        <text x={x(0) + 6} y={y(Y_MAX) + 14} className="ink">north star</text>
         {[0.4, 0.6, 0.8, 1.0].map((a) => (
           <g key={a}>
             <line x1={M.l} x2={W - M.r} y1={y(a)} y2={y(a)} stroke="var(--line)" />

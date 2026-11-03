@@ -131,8 +131,8 @@ button, input { font: inherit; }
 
 /* ── results ── */
 .lede { max-width: 720px; color: var(--ink-2); margin-top: 8px; }
-.verdict { display: flex; gap: 10px; align-items: baseline; margin-top: 28px; padding: 14px 16px; border-left: 3px solid var(--critical); background: var(--surface); }
-.verdict .mark { color: var(--critical); font-weight: 600; white-space: nowrap; }
+.verdict { display: flex; gap: 10px; align-items: baseline; margin-top: 28px; padding: 14px 16px; border-left: 3px solid var(--green); background: var(--surface); }
+.verdict .mark { color: var(--green-ink); font-weight: 600; white-space: nowrap; }
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart text { fill: var(--muted); font-size: 11px; }

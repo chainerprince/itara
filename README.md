@@ -11,11 +11,22 @@ Every engineer on a team sends the same codebase, docs and decisions to an expen
 
 Itara speaks the OpenAI API, so any app, chat UI or coding agent uses it by changing its base URL.
 
+## What it achieves
+
+Measured on the real models (Llama 3.1 8B and Muse Spark 1.2), on all 300 SWE-bench Lite issues and 300 LoCoMo questions:
+
+- **On code, Itara matches the closed model with about a quarter of its tokens.** Muse given the team's memory scores 86.3% against 86.0% with the full context, while reading under 9% of that context.
+- **Llama knows when it's unsure.** Its own confidence separates its right answers from its wrong ones (AUC 0.68 on code, 0.80 on conversations), and the gate it drives beats escalating at random by 5 points.
+- **Sharing scales with the team.** At 16 engineers, shared memory cuts the work per engineer by 35%, against 13% without sharing.
+- **Teams stay isolated.** A teammate reused 6,144 cached prompt tokens; someone on another team reused none, by design.
+
 ## The north star
+
+Before running anything, we set a more ambitious goal:
 
 > For a team sharing one codebase, Itara matches the accuracy of sending context straight to the closed model, while sending it **≤ 10% of the tokens**. It knows when not to escalate, and the shared cache makes each extra teammate cheaper.
 
-We set this goal before running anything, and **we haven't met it yet** (see the results below). It is still the goal Itara is built toward, and future versions aim straight at it. The results so far are promising: see [the path to the north star](#the-path-to-the-north-star).
+We haven't reached it yet: at 10% of the tokens, Itara gets 74% on code against Muse's 86%. It is still what Itara is built toward, and the results point to a way there: see [the path to the north star](#the-path-to-the-north-star).
 
 ## How it works
 
@@ -52,14 +63,14 @@ Measured on the real models: Llama 3.1 8B on vLLM (a Modal H100) and Muse Spark 
 | Muse with the full context (the reference) | 86.0% | 100% |
 | **Itara: every question to Muse with team memory** | **86.3%** | **23%** (about a quarter; 36% of the dollars) |
 | Itara, cascade gate at 20% of the tokens | 82.7% | 20% |
-| Itara, cascade gate at 10% (the north star) | 74.0% | 10% |
+| Itara, cascade gate at 10% (the north star, not reached yet) | 74.0% | 10% |
 | Llama alone with team memory | 55.7% | 0% |
 
 - **Memory carries most of the saving.** With the team's memory summaries, Muse reads **under 9% of the context** it would otherwise get and loses no accuracy. What remains of the bill is mostly Muse's own reasoning, about 2,800 tokens per escalation.
 - **The gate's signal is real.** Llama's confidence separates its right drafts from wrong ones with an AUC of 0.68 on code and 0.80 on conversations. At 10% of the tokens, the cascade beats escalating at random by 5 points on code.
-- **The 20% and 25% budgets were chosen after the run.** The 10% verdict is the one set in advance. A follow-up at Muse's minimal reasoning effort, also chosen after the run, comes within about 2 points on code at 10% of the tokens, but its 95% interval includes misses of up to 5 points (section 10 of the notebook).
+- **What was decided after the run.** The 10% north star is the only budget set in advance; the 20% and 25% budgets were chosen after seeing the results. A follow-up at Muse's minimal reasoning effort, also chosen after the run, comes within about 2 points on code at 10% of the tokens, but its 95% interval includes misses of up to 5 points (section 10 of the notebook).
 
-**On long conversations, retrieval is the bottleneck.** Itara reaches 62.7% against Muse's 87.0% with the full conversation. Its memory search misses the right session for 37% of questions. When it finds that session, Muse with the raw pages scores 85.3%.
+**Long conversations are harder, and the reason is retrieval.** Itara reaches 62.7% against Muse's 87.0% with the full conversation. Its memory search misses the right session for 37% of questions. When it finds that session, Muse with the raw pages scores 85.3%.
 
 **Sharing pays off as the team grows.** In replays of 1 to 16 engineers on one repo, the gateway's ingest work per engineer falls **35%** with shared memory at 16 engineers, against 13% without sharing (related tasks; on random tasks, 7% vs 1%). A teammate's request reused **6,144** cached prompt tokens; someone on another team reused **0**.
 

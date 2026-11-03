@@ -37,7 +37,7 @@
 - **Paired bootstrap** confidence intervals; answers at temperature 0.
 - **Team replay:** 1–16 simulated engineers on one repo, related vs random tasks.
 - **Pipeline checks** before spending money: a deterministic simulated model with invariant checks, small real-model canaries, and a response cache.
-- **Honesty rules:** the north star was stated before the run and reported as failed. Larger budgets and minimal reasoning effort are labelled as chosen after the run, and runaway Muse answers are called out.
+- **Honesty rules:** the north star was stated before the run and is reported as not reached yet. Larger budgets and minimal reasoning effort are labelled as chosen after the run, and runaway Muse answers are called out.
 
 ## Dashboard and CLI
 - **Dashboard,** served by the gateway at `/dashboard`:

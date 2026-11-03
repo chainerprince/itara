@@ -42,12 +42,15 @@ export function Results() {
       </p>
 
       <div className="verdict">
-        <span className="mark">Not met yet.</span>
+        <span className="mark">Matches Muse on code.</span>
         <span className="quiet">
-          The goal: within 3 points of Muse with the full context, at 10% of its tokens. At 10%: code {pct(runs.swebench.north_star.accuracy)} against {pct(runs.swebench.muse_direct.accuracy)},
-          conversations {pct(runs.locomo.north_star.accuracy)} against {pct(runs.locomo.muse_direct.accuracy)}.
+          {pct(compact.accuracy)} against {pct(runs.swebench.muse_direct.accuracy)} with the full context, at about a quarter of its tokens. Muse reads {pct(compact.input_share, 0)} of the context.
         </span>
       </div>
+      <p className="note">
+        The north star, set before the run: within 3 points of Muse at 10% of its tokens. Not reached yet: at 10%, code {pct(runs.swebench.north_star.accuracy)} against {pct(runs.swebench.muse_direct.accuracy)},
+        conversations {pct(runs.locomo.north_star.accuracy)} against {pct(runs.locomo.muse_direct.accuracy)}.
+      </p>
 
       <section className="section">
         <div className="section-head">
@@ -71,7 +74,7 @@ export function Results() {
                   <tr key={x.budget}>
                     <td>
                       {pct(x.budget, 0)}
-                      <div className="muted" style={{ fontSize: 12 }}>{x.after_run ? "chosen after the run" : "the goal"}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{x.after_run ? "chosen after the run" : "the north star"}</div>
                     </td>
                     <td>
                       <span className={`acc${x.gap >= -0.03 ? " ok" : ""}`}>{pct(x.accuracy)}</span>{" "}

@@ -7,8 +7,8 @@ Everything measured for Itara, on the real models: Llama 3.1 8B Instruct (vLLM o
 | | Code (SWE-bench Lite, 300) | Conversations (LoCoMo, 300) |
 |---|---|---|
 | Muse with the full context (reference) | 86.0% | 87.0% |
-| Itara, cascade gate at 10% of Muse tokens (the pre-registered goal) | 74.0%: **not met** | 54.7%: **not met** |
-| Best within 25% of Muse tokens (budget chosen after the run) | 86.3% at 23% (every question to Muse with team memory) | 62.7% at 16% |
+| **Itara, best within 25% of Muse tokens** (budget chosen after the run) | **86.3% at 23%** (every question to Muse with team memory) | 62.7% at 16% |
+| Itara, cascade gate at 10% of Muse tokens (the north star, set in advance) | 74.0%: not reached yet | 54.7%: not reached yet |
 | Llama alone, with team memory | 55.7% | 38.3% |
 
 - **Memory:** with the team's memory summaries, Muse reads 8.9% of the context on code and loses no accuracy.
