@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS usage (
 -- estimated: a paid response came back without usage, so the reserved worst case was recorded.
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS cached_tokens int NOT NULL DEFAULT 0;
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS estimated boolean NOT NULL DEFAULT false;
+-- request_id: the gateway request a call belongs to (a cascade question makes a draft, its
+-- probes and maybe an escalation), so the dashboard counts questions, not calls.
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS request_id uuid;
+CREATE INDEX IF NOT EXISTS usage_request_idx ON usage (request_id, created_at);
 
 -- API keys. Identity comes only from here, never from client-supplied headers.
 -- Not granted to gateway_app; only the hash of each key is stored.

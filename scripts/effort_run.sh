@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Muse at a lower reasoning effort, after scripts/gate_run.sh. Muse's reasoning is most of an
-# escalation's tokens (eval/full_results.ipynb, section 3), so this reruns every condition
+# escalation's tokens (results/full_run.ipynb, section 3), so this reruns every condition
 # that calls Muse (muse_direct, escalate_compact, escalate_raw) with MUSE_REASONING_EFFORT
 # set, on the full run's database and memory, under the run id <FULL_ID>-<effort>. Llama's
 # side doesn't see Muse's effort, so the full run's drafts and confidence probes are reused.
@@ -30,7 +30,7 @@ export INGEST_CONCURRENCY=${INGEST_CONCURRENCY:-16}
 export SPEND_CAP_USD=${FULL_SPEND_CAP:-60}
 export MUSE_REASONING_EFFORT=$EFFORT
 export MODEL_CACHE=
-R=eval/results
+R=results/runs
 
 for bench in swebench locomo; do
   if [ -z "${GATE_ONLY:-}" ]; then
@@ -43,4 +43,4 @@ for bench in swebench locomo; do
   cp "$R/raw/${bench}_confidence_$ID.jsonl" "$R/raw/${bench}_confidence_$NEW.jsonl"
 done
 uv run python -m eval.learn_gate --id "$NEW" -n "$N" --database "$DATABASE_URL" "$@"
-echo "Results notebook: eval/full_results.ipynb (set RUN_ID = \"$NEW\" for this run)"
+echo "Results notebook: results/full_run.ipynb (set RUN_ID = \"$NEW\" for this run)"

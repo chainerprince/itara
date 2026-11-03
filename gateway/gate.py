@@ -19,7 +19,7 @@ right) from Llama's confidence alone, and a draft under `threshold` escalates. C
 escalates with its summaries (Muse knows the code; summaries matched full context), other
 memory with the raw pages (summaries of conversations and docs drop the details asked
 about). On the full run it beat the per-route LearnedGate by 6 points at 10% of the tokens
-on code (eval/full_results.ipynb, section 8).
+on code (results/full_run.ipynb, section 8).
 """
 
 from __future__ import annotations

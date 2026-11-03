@@ -5,7 +5,7 @@
 For every item of a full run: rebuild the exact llama_only request (the same memory search,
 prompt and cache scope as the gateway's), draft it again at temperature 0 with logprobs,
 then resample it and ask Llama whether the draft is right, the calls the live gateway makes.
-Writes eval/results/raw/<bench>_confidence_<id>.jsonl, one row per item, and skips items
+Writes results/runs/raw/<bench>_confidence_<id>.jsonl, one row per item, and skips items
 already there, so it can stop and resume. Llama only: no Muse, nothing against the cap.
 
 At temperature 0 the new draft should be the run's llama_only answer; `same_as_run` records

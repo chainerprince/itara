@@ -2,8 +2,12 @@
 
     export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gateway_demo
     uv run python -m scripts.init_db --create
-    GATE_PATH=eval/results/gate_full1_model.json uv run uvicorn gateway.server:app --port 8000
+    GATE_PATH=results/runs/gate_full1_model.json uv run uvicorn gateway.server:app --port 8000
     uv run python -m scripts.demo                  # in another shell, same DATABASE_URL
+
+Or with the CLI: `uv run itara up --gate results/runs/gate_full1_model.json`, then `uv run itara demo`.
+The dashboard is at http://localhost:8000/dashboard; it asks for an admin key
+(uv run itara key add --team web --user you --admin) and updates every 3 s.
 
 It makes fresh keys for alice and bob (team web), olga (team ops) and an admin (team web),
 straight in the database; they are never printed. Then:
@@ -121,7 +125,7 @@ async def main(args) -> None:
         for who, question, why in SCRIPT:
             start = time.monotonic()
             r = await gw.post("/chat/completions", headers=auth(who), json={
-                "model": "memory-gateway", "messages": [{"role": "user", "content": question}],
+                "model": "itara", "messages": [{"role": "user", "content": question}],
                 "temperature": 0})
             r.raise_for_status()
             show(who, why, question, r, time.monotonic() - start)

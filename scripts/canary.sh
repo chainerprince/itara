@@ -51,4 +51,4 @@ run "${SWE[@]}" --baseline rule_gate --resume "$ID-rule_gate" --yes
 
 uv run python -m eval.checks "$ID-muse_direct" "$ID-escalate_compact" "$ID-llama_only" \
   "$ID-rule_gate" || true
-echo "Done. Open eval/day6_results.ipynb (RUN_IDS = the four $ID-* runs)."
+echo "Done. Per-run summaries: results/runs/swebench_*_$ID-*.json."

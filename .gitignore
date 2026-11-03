@@ -14,6 +14,9 @@ __pycache__/
 # Local data and results
 *.db
 # Eval outputs: simulated and stand-in numbers stay local; add real results deliberately (git add -f)
-eval/results/
+results/runs/
 .DS_Store
 eval/data/
+
+# Dashboard app: dependencies stay local; dashboard/dist is committed so Itara runs without Node
+dashboard/node_modules/

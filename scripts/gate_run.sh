@@ -31,4 +31,4 @@ if [ -z "${GATE_ONLY:-}" ]; then
   uv run python -m eval.confidence --id "$ID" -n "$N"
 fi
 uv run python -m eval.learn_gate --id "$ID" -n "$N" "$@"
-echo "Results notebook: eval/full_results.ipynb (RUN_ID = \"$ID\")"
+echo "Results notebook: results/full_run.ipynb (RUN_ID = \"$ID\")"

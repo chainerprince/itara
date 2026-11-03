@@ -38,5 +38,4 @@ for order in related random; do
       --users 1,2,4,8,16 --per-user 2 --yes
   done
 done
-echo "Done. Open eval/day6_results.ipynb with BENCH = swebench or locomo and"
-echo "RUN_IDS = [f\"$ID-{BENCH}-{b}\" for b in (\"llama_only\", \"rule_gate\", \"escalate_compact\", \"muse_direct\")]"
+echo "Done. Next: scripts/gate_run.sh, then open results/full_run.ipynb with RUN_ID = \"$ID\"."

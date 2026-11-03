@@ -1,6 +1,6 @@
 """OpenAI-compatible gateway: point any app's base URL at /v1.
 
-Callers authenticate with `Authorization: Bearer <gateway key>` (scripts/add_key.py), which
+Callers authenticate with `Authorization: Bearer <gateway key>` (`itara key add`), which
 every OpenAI SDK already sends; the key decides the caller's team and user. Clients that ask
 for streaming get the whole answer as a single chunk. Run with a single worker: the spend
 reservation lives in this process.
@@ -12,16 +12,19 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager, nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+from pathlib import Path
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pgvector.psycopg import register_vector_async
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
-from cache.lmcache import scoped_body, with_memory
+from cache.lmcache import cache_scope, scoped_body, with_memory
 from gateway.accounting import Ledger, SpendCapExceeded
 from gateway.auth import Principal, Principals
 from gateway.config import Settings
@@ -30,7 +33,12 @@ from gateway.gate import (ESCALATIONS, FEATURES, CascadeGate, LearnedGate, Route
                           load_gate, rule_gate)
 from gateway.llm import ChatClient
 from memory.compress import ingest
-from memory.store import MemoryStore, default_embedder
+from memory.store import MemoryStore, Scope, default_embedder
+
+DASHBOARD = Path(__file__).parent.parent / "dashboard"
+# The gateway request every model call belongs to, so the ledger can group a question's
+# draft, probes and escalation (the probes run in tasks, which copy this context).
+REQUEST_ID: ContextVar[UUID | None] = ContextVar("request_id", default=None)
 
 
 @dataclass
@@ -147,7 +155,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         await app.state.services.muse.close()
         await pool.close()
 
-    app = FastAPI(title="Memory Gateway", lifespan=lifespan)
+    app = FastAPI(title="Itara", lifespan=lifespan)
 
     @app.exception_handler(SpendCapExceeded)
     async def spend_cap(request: Request, exc: SpendCapExceeded):
@@ -173,7 +181,7 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.get("/v1/models")
     async def models():
-        return {"object": "list", "data": [{"id": "memory-gateway", "object": "model"}]}
+        return {"object": "list", "data": [{"id": "itara", "object": "model"}]}
 
     async def prepare(s: Services, scope, route: Route, body: dict, hits: list) -> dict:
         """The request as the route's model gets it: with its memory (and cache scope)."""
@@ -206,7 +214,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             if latency_ms is None:
                 latency_ms = int((time.monotonic() - start) * 1000)
             await s.ledger.record(scope, client.model, route, response.get("usage", {}),
-                                  latency_ms, paid=paid, estimate_usd=estimate)
+                                  latency_ms, paid=paid, estimate_usd=estimate,
+                                  request_id=REQUEST_ID.get())
         return response
 
     async def learned_route(s: Services, scope, question: str, hits: list, local: dict,
@@ -233,6 +242,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         s: Services = request.app.state.services
         principal = await principal_of(request)
         scope = principal.scope
+        REQUEST_ID.set(uuid4())
         body = await request.json()
         if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
             raise HTTPException(400, "Request body needs a messages list")
@@ -274,6 +284,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         """Add text (docs, code, decisions) to memory: team-shared, or private to the caller."""
         s: Services = request.app.state.services
         scope = (await principal_of(request)).scope
+        request_id = uuid4()
         start = time.monotonic()
         ids, usages, fallbacks = await ingest(s.store, s.llama, scope, item.text,
                                               source=item.source, private=item.private,
@@ -282,7 +293,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         latency_ms = int((time.monotonic() - start) * 1000) // max(1, len(usages))
         for page_usage in usages:  # compression is local work the team pays for once
             await s.ledger.record(scope, s.llama.model, "ingest", page_usage, latency_ms,
-                                  paid=False)
+                                  paid=False, request_id=request_id)
         return {"ids": [str(i) for i in ids], "fallback_pages": fallbacks}
 
     @app.get("/v1/usage")
@@ -291,9 +302,33 @@ def create_app(services: Services | None = None) -> FastAPI:
         if not (await principal_of(request)).is_admin:
             raise HTTPException(403, "/v1/usage needs an admin key")
         s: Services = request.app.state.services
+        requests = await s.ledger.requests([r.value for r in ESCALATIONS])
+        teams = sorted({r["team_id"] for r in requests["by_user_route"]})
         return {"spent_usd": await s.ledger.spent(), "cap_usd": s.ledger.cap_usd,
                 "muse_model": s.muse.model, "muse_is_standin": s.muse_is_standin,
-                "by_model_route": await s.ledger.summary()}
+                "llama_model": s.llama.model, "llama_backend": s.llama_backend,
+                "gate": type(s.gate).__name__ if s.gate else "rule",
+                # The KV cache key each team's shared memory is cached under (cache/lmcache.py).
+                "cache_scopes": {t: cache_scope(Scope(t, ""), []) for t in teams},
+                "by_model_route": await s.ledger.summary(), **requests}
+
+    @app.get("/dashboard/results.json")
+    async def dashboard_results():
+        """The benchmark results the dashboard shows (scripts/dashboard_data.py)."""
+        return FileResponse(DASHBOARD / "public" / "results.json")
+
+    @app.get("/dashboard")
+    @app.get("/dashboard/{path:path}")
+    async def dashboard(path: str = ""):
+        """The dashboard app (dashboard/, built to dashboard/dist). It asks for an admin key and
+        reads /v1/usage. Paths that aren't files are the app's own pages."""
+        dist = (DASHBOARD / "dist").resolve()
+        file = (dist / path).resolve()
+        if path and file.is_file() and file.is_relative_to(dist):
+            return FileResponse(file)
+        if not (dist / "index.html").is_file():
+            raise HTTPException(404, "The dashboard isn't built: cd dashboard && npm install && npm run build")
+        return FileResponse(dist / "index.html")
 
     return app
 

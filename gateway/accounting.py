@@ -9,8 +9,9 @@ server with a single worker.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 from psycopg_pool import AsyncConnectionPool
 
@@ -76,6 +77,7 @@ class Ledger:
         latency_ms: int,
         paid: bool,
         estimate_usd: float = 0.0,
+        request_id: UUID | None = None,
     ) -> None:
         """Record one call. A paid call with no token counts is charged estimate_usd."""
         prompt = usage.get("prompt_tokens", 0)
@@ -91,10 +93,10 @@ class Ledger:
         async with self._pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO usage (team_id, user_id, model, route, prompt_tokens, completion_tokens,"
-                " cached_tokens, cost_usd, latency_ms, estimated)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " cached_tokens, cost_usd, latency_ms, estimated, request_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (scope.team_id, scope.user_id, model, route, prompt, completion, cached, cost,
-                 latency_ms, estimated),
+                 latency_ms, estimated, request_id),
             )
 
     async def summary(self) -> list[dict]:
@@ -102,12 +104,58 @@ class Ledger:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 "SELECT model, route, count(*), sum(prompt_tokens), sum(completion_tokens),"
-                " sum(cached_tokens), sum(latency_ms), sum(cost_usd)"
+                " sum(cached_tokens), sum(latency_ms), sum(cost_usd), max(created_at)"
                 " FROM usage GROUP BY model, route ORDER BY model, route"
             )
             keys = ("model", "route", "requests", "prompt_tokens", "completion_tokens",
                     "cached_tokens", "latency_ms", "cost_usd")
             return [
-                {**dict(zip(keys, row)), "cost_usd": float(row[7])}
+                {**dict(zip(keys, row)), "cost_usd": float(row[7]), "last_at": row[8].isoformat()}
                 for row in await cur.fetchall()
             ]
+
+    async def requests(self, paid_routes: Iterable[str], recent: int = 20) -> dict:
+        """Per gateway request, for the dashboard: its final route and what it cost.
+
+        A request's route is its paid (Muse) call if it made one, else its Llama call, so a
+        cascade question kept on Llama counts as local_memory however many probes it ran.
+        Returns the totals per person (team, user) and route, and the most recent requests.
+        """
+        per_request = (
+            "SELECT request_id, min(created_at) AS at, min(team_id) AS team_id,"
+            " min(user_id) AS user_id,"
+            " coalesce(max(route) FILTER (WHERE route = ANY(%(paid)s)),"
+            "          max(route) FILTER (WHERE route <> 'gate_probe')) AS route,"
+            " count(*) AS calls,"
+            " coalesce(sum(prompt_tokens + completion_tokens)"
+            "          FILTER (WHERE route = ANY(%(paid)s)), 0) AS muse_tokens,"
+            " coalesce(sum(prompt_tokens) FILTER (WHERE route <> ALL(%(paid)s)), 0)"
+            "   AS llama_prompt_tokens,"
+            " sum(cached_tokens) AS cached_tokens,"
+            " coalesce(sum(latency_ms) FILTER (WHERE route <> ALL(%(paid)s)), 0) AS llama_ms,"
+            " sum(latency_ms) AS latency_ms, sum(cost_usd) AS cost_usd"
+            " FROM usage WHERE request_id IS NOT NULL GROUP BY request_id"
+        )
+        keys = ("team_id", "user_id", "route", "requests", "calls", "muse_tokens",
+                "llama_prompt_tokens", "cached_tokens", "llama_ms", "cost_usd", "last_at")
+        params = {"paid": list(paid_routes), "recent": recent}
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT team_id, user_id, route, count(*), sum(calls), sum(muse_tokens),"
+                " sum(llama_prompt_tokens), sum(cached_tokens), sum(llama_ms), sum(cost_usd),"
+                f" max(at) FROM ({per_request}) r"
+                " GROUP BY team_id, user_id, route ORDER BY team_id, user_id, route",
+                params,
+            )
+            totals = [{**dict(zip(keys, (*row[:3], *map(int, row[3:9])))),
+                       "cost_usd": float(row[9]), "last_at": row[10].isoformat()}
+                      for row in await cur.fetchall()]
+            cur = await conn.execute(f"{per_request} ORDER BY at DESC LIMIT %(recent)s", params)
+            columns = [c.name for c in cur.description]
+            latest = []
+            for row in await cur.fetchall():
+                r = dict(zip(columns, row))
+                latest.append({**r, "request_id": str(r["request_id"]), "at": r["at"].isoformat(),
+                               **{k: int(r[k]) for k in columns[5:-1]},
+                               "cost_usd": float(r["cost_usd"])})
+        return {"by_user_route": totals, "recent": latest}

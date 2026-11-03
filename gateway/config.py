@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     muse_is_standin: bool = False
     # Muse's reasoning effort (e.g. minimal, low) for every request sent to it that doesn't set
     # its own: escalations, tool-call passthrough and eval's muse_direct. Empty: Muse's default.
-    # Reasoning is most of an escalation's Muse tokens (eval/full_results.ipynb, section 3).
+    # Reasoning is most of an escalation's Muse tokens (results/full_run.ipynb, section 3).
     muse_reasoning_effort: str = ""
 
     spend_cap_usd: float = 150.0

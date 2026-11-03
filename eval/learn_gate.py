@@ -38,7 +38,7 @@ escalation cost ~1,000 output tokens however short the prompt.
 Also reports how well each feature, and the gate's out-of-fold P(draft right), tells right
 drafts from wrong ones (AUC: 0.5 is chance, 1 is perfect).
 
-Writes eval/results/gate_<id>.json (both gates' sweeps, references, verdicts, signal),
+Writes results/runs/gate_<id>.json (both gates' sweeps, references, verdicts, signal),
 gate_<id>_sweep.csv (the per-route gate), gate_<id>_model.json (the cascade: the GATE_PATH
 file), gate_<id>_routes_model.json (the per-route gate) and a `full` baseline per benchmark
 (the cascade's offline replay at --budget) for the results notebooks.

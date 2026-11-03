@@ -1,7 +1,7 @@
 """vLLM on Modal: the Llama gateway model, served as an OpenAI-compatible API.
 
-NOT YET DEPLOYED: written ahead of the Modal key. Until then Ollama on the laptop stands in
-(see .env.example). To switch:
+Deployed for the full run (Llama 3.1 8B Instruct on one H100). Without Modal, Ollama on a laptop
+stands in (see .env.example). To deploy:
 
     modal secret create hf-token HF_TOKEN=...            # account with the Llama license accepted
     modal secret create llama-api-key LLAMA_API_KEY=...  # the gateway's key for this endpoint

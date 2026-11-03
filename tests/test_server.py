@@ -37,7 +37,7 @@ async def gateway(pool):
 
 
 def chat(text, **extra):
-    return {"model": "memory-gateway", "messages": [{"role": "user", "content": text}], **extra}
+    return {"model": "itara", "messages": [{"role": "user", "content": text}], **extra}
 
 
 async def test_requires_a_valid_key(gateway):
@@ -212,3 +212,37 @@ async def test_cascade_gate_escalates_an_unsure_draft_with_raw_pages(gateway):
         assert r.headers["x-gateway-route"] == route
         assert len(services.llama.requests) == 3  # the draft and its two probes
     assert "vercel.json" in services.muse.requests[0]["messages"][0]["content"]  # deploy.md: raw
+
+
+async def test_usage_counts_requests_not_calls(gateway):
+    client, services = gateway
+    services.llama = LogprobModel("llama")
+    zeros = [0.0] * len(CONFIDENCE_FEATURES)
+    for threshold in (0.6, 0.4):  # P(draft right) 0.5: escalated with raw pages, then kept
+        services.gate = CascadeGate(mean=zeros, scale=[1.0] * len(zeros), weights=[*zeros, 0.0],
+                                    threshold=threshold)
+        await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
+    await client.post("/v1/chat/completions", json=chat("hi"), headers=services.keys["olga"])
+    usage = (await client.get("/v1/usage", headers=services.keys["admin"])).json()
+    totals = {(r["team_id"], r["route"]): r for r in usage["by_user_route"]}
+    assert {k: r["requests"] for k, r in totals.items()} == {
+        ("ops", "local_memory"): 1, ("web", "escalate_raw"): 1, ("web", "local_memory"): 1}
+    assert {r["user_id"] for r in usage["by_user_route"]} == {"frank", "olga"}
+    assert set(usage["cache_scopes"]) == {"ops", "web"}
+    assert usage["cache_scopes"]["ops"] != usage["cache_scopes"]["web"]
+    assert totals["web", "local_memory"]["calls"] == 3  # the draft and its two probes
+    assert totals["web", "escalate_raw"]["calls"] == 4  # and the escalation
+    assert totals["web", "escalate_raw"]["muse_tokens"] == 110
+    assert totals["web", "local_memory"]["muse_tokens"] == 0
+    assert [r["user_id"] for r in usage["recent"]] == ["olga", "frank", "frank"]
+    assert usage["recent"][0]["route"] == "local_memory" and usage["gate"] == "CascadeGate"
+
+
+async def test_dashboard_serves_the_app_and_its_pages(gateway):
+    client, _ = gateway
+    for path in ("/dashboard", "/dashboard/", "/dashboard/results"):  # the app's own routes
+        r = await client.get(path)
+        assert r.status_code == 200 and '<div id="root">' in r.text
+    assert (await client.get("/dashboard/results.json")).json()["run_id"]
+    r = await client.get("/dashboard/..%2F..%2Fgateway%2Fconfig.py")  # never outside dist
+    assert "database_url" not in r.text

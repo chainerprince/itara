@@ -8,7 +8,7 @@ The sheet samples 50 answers at random (seeded) across the LoCoMo conditions of 
 so every condition's verdicts get checked, and hides nothing: the judge's verdict is shown
 next to the blank column. Judge the response against the gold answer as the judge was told
 to: same answer, ignoring wording and extra detail; dates must refer to the same time.
-Writes and reads eval/results/handcheck_locomo_<id>.csv.
+Writes and reads results/runs/handcheck_locomo_<id>.csv.
 """
 
 from __future__ import annotations

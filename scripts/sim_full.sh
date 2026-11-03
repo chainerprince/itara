@@ -6,7 +6,7 @@
 #
 # Every SWE-bench Lite item through four baselines, a LoCoMo sample, team replay (related and
 # random task order, shared and no_sharing), then the invariant checks. Results are labelled
-# simulated; open eval/day6_results.ipynb to look at them.
+# simulated, and the invariant checks are the result: nothing here is a number to report.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,5 +39,5 @@ for order in related random; do
       --users 1,2,4,8,16 --per-user 2 --yes
   done
 done
-echo "Done. Open eval/day6_results.ipynb (BENCH = swebench or locomo)."
+echo "Done. The invariant checks above are the result; per-run files are in results/runs/."
 exit ${FAILED:-0}

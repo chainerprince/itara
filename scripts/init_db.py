@@ -9,14 +9,9 @@ memory never mixes with other runs'.
 """
 
 import argparse
-from pathlib import Path
-
-import psycopg
-from psycopg import sql
 
 from gateway.config import Settings
-
-SCHEMA = Path(__file__).parent.parent / "memory" / "schema.sql"
+from memory.schema import init_database
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -26,18 +21,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     url = Settings().database_url
-    base, name = url.rsplit("/", 1)
-    name = name.split("?")[0]
-    if args.fresh and not name.endswith(("_sim", "_test", "_check")):
-        raise SystemExit(f"--fresh only drops *_sim, *_test or *_check databases, not {name!r}")
-    if args.create or args.fresh:
-        with psycopg.connect(f"{base}/postgres", autocommit=True) as admin:
-            if args.fresh:
-                admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
-                    sql.Identifier(name)))
-            exists = admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
-            if not exists:
-                admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-    with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute(SCHEMA.read_text())
+    init_database(url, create=args.create, fresh=args.fresh)
     print(f"Schema applied to {url.rsplit('@', 1)[-1]}")

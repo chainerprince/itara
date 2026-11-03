@@ -32,7 +32,7 @@ from gateway.gate import ESCALATIONS
 from gateway.server import Services, build_services, create_app
 from memory.store import Memory, Scope
 
-RESULTS = Path(__file__).parent / "results"
+RESULTS = Path(__file__).parent.parent / "results" / "runs"
 BASELINES = ("muse_direct", "escalate_compact", "escalate_raw", "llama_only", "rule_gate",
              "no_sharing", "full")
 FORCED_ROUTES = {"llama_only": "local_memory", "escalate_compact": "escalate_compact",
