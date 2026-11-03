@@ -37,6 +37,9 @@ class Settings(BaseSettings):
 
     # A learned gate saved by eval/learn_gate.py (JSON). Empty: the rule-based gate.
     gate_path: str = ""
+    # Send every question to Muse with the team's memory summaries, with no gate: the most
+    # accurate setting measured (`itara up --mode accurate`). Overrides gate_path.
+    always_escalate: bool = False
     # The cascade gate's threshold on P(draft right), instead of the saved one: higher
     # escalates more. eval/learn_gate.py prints the threshold for each budget.
     gate_threshold: float | None = None

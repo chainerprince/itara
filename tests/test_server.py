@@ -70,6 +70,17 @@ async def test_easy_question_with_memory_stays_local(gateway):
     assert services.muse.requests == []
 
 
+async def test_accurate_mode_sends_every_question_to_muse_with_memory(gateway):
+    client, services = gateway
+    services.always_escalate = True
+    r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
+    assert r.headers["x-gateway-route"] == "escalate_compact"
+    assert services.llama.requests == []
+    assert "Vercel" in services.muse.requests[0]["messages"][0]["content"]
+    usage = (await client.get("/v1/usage", headers=services.keys["admin"])).json()
+    assert usage["gate"] == "always escalate"
+
+
 async def test_escalation_is_paid_and_carries_memory(gateway):
     client, services = gateway
     r = await client.post("/v1/chat/completions", json=chat("deploy frontend " + "x " * 900))

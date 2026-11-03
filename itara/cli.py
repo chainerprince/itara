@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -25,6 +26,8 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).parent.parent
 DEFAULT_URL = "http://localhost:8000/v1"
+FAST_GATE = "results/runs/gate_full1_model.json"  # the cascade trained on the full run
+FAST_POINT = "results/runs/gate_full1.json"       # its 10% operating point on code (the README's)
 # Text worth remembering; code sources get @<commit> so escalations send them as summaries.
 CODE = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt", ".rb", ".php", ".c",
         ".h", ".cc", ".cpp", ".hpp", ".cs", ".swift", ".scala", ".sql", ".sh", ".toml", ".yaml",
@@ -73,7 +76,14 @@ def up(args) -> None:
     from gateway.config import Settings
     from memory.schema import init_database
 
-    if args.gate:
+    mode = "fast" if args.gate else args.mode
+    if mode == "accurate":
+        os.environ["ALWAYS_ESCALATE"] = "1"
+    elif mode == "fast" and not args.gate:
+        os.environ["GATE_PATH"] = str(ROOT / FAST_GATE)
+        point = json.loads((ROOT / FAST_POINT).read_text())["cascade"]["operating_points"]["0.1"]["swebench"]
+        os.environ.setdefault("GATE_THRESHOLD", str(point["threshold"]))
+    elif args.gate:
         os.environ["GATE_PATH"] = args.gate
     settings = Settings()
     if urlparse(settings.database_url).hostname in ("localhost", "127.0.0.1") and not args.no_docker:
@@ -81,8 +91,10 @@ def up(args) -> None:
         subprocess.run(["docker", "compose", "up", "-d", "--wait"], cwd=ROOT, check=True)
     wait_for_postgres(settings.database_url)
     init_database(settings.database_url, create=True)
-    gate = settings.gate_path or "the rule-based gate (set GATE_PATH or --gate for the learned one)"
-    print(f"\n  itara is up on http://{args.host}:{args.port}/v1  ·  gate: {gate}"
+    gate = ("accurate: every question to Muse with team memory" if settings.always_escalate
+            else f"fast: the confidence cascade ({settings.gate_path})" if settings.gate_path
+            else "rule: the hand-written gate")
+    print(f"\n  itara is up on http://{args.host}:{args.port}/v1  ·  mode: {gate}"
           f"\n  dashboard:  http://localhost:{args.port}/dashboard"
           f"\n  Llama: {settings.llama_model} ({settings.llama_backend})  ·  Muse: {settings.muse_model}"
           f"{' (a local stand-in)' if settings.muse_is_standin else ''}\n")
@@ -217,7 +229,11 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("up", help="start Postgres (Docker), apply the schema, run the gateway")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
-    p.add_argument("--gate", help="a gate saved by eval/learn_gate.py (sets GATE_PATH)")
+    p.add_argument("--mode", choices=["accurate", "fast", "rule"], default="accurate",
+                   help="accurate: every question to Muse with team memory (the default); "
+                        "fast: Llama answers what it's sure of, by the confidence cascade; "
+                        "rule: the hand-written gate")
+    p.add_argument("--gate", help="fast mode with a gate saved by eval/learn_gate.py (sets GATE_PATH)")
     p.add_argument("--no-docker", action="store_true", help="Postgres is already running")
     p.set_defaults(run=up)
 

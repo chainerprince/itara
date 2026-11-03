@@ -38,7 +38,8 @@ All of this is explained, with intervals, in the notebook and the paper.
 | `replay_<baseline>_<order>_<timestamp>.csv` | Team replay: per-engineer cost at 1–16 engineers (`rule_gate` = one team sharing; `no_sharing` = everyone alone). |
 | `handcheck_locomo_full1.csv` | 50 LoCoMo judge verdicts checked by hand (48 agree). |
 | `effort_check_full1-minimal.json` | Intervals for the minimal-effort result (`eval/effort_check.py`). |
-| `cost_compare_full1.json` | Dollars (Muse and GPU) and latency per question for each option, including simpler alternatives (`eval/cost_compare.py`). |
+| `cost_compare_full1.json` | Dollars (Muse and GPU) and latency per question for each option, including simpler alternatives, RouteLLM's router and team-scale ingest dollars (`eval/cost_compare.py`). |
+| `routellm_bert_full1.jsonl` | RouteLLM's BERT router score for each question (`eval/routellm_scores.py`). |
 
 **Run ids:**
 - `full1`: the full run. `full1-minimal`: the same with Muse at minimal effort, chosen after the run.

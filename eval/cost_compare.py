@@ -23,12 +23,19 @@ Added on 3 Nov, after the run. For each option, per question:
 - **Simpler alternatives** on the same items: Muse with the raw pages retrieved (no
   compression), the hand-written rule gate, and escalating at random as many questions as the
   cascade does (mean of 1,000 draws).
+- **An off-the-shelf router:** RouteLLM's BERT router (eval/routellm_scores.py) decides from the
+  question alone, before any draft: questions it sends up go straight to Muse with the team's
+  memory, the rest to Llama. Its threshold is the most accurate within the same budgets as the
+  cascade, chosen on these items (which favours it).
+- **Team scale:** the replay's pages ingested per engineer, priced at the full run's measured
+  build rate (H100 seconds per ingest call).
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 
 import numpy as np
@@ -45,19 +52,44 @@ OUTPUT_LIMIT = 262_144     # Muse's output limit: answers that reach it are runa
 LOCAL = Route.LOCAL_MEMORY.value
 
 
-async def ledger_facts(url: str, run_id: str, bench: str) -> tuple[float, float]:
-    """The memory build's wall time (first to last ingest call), and the share of full-context
-    Muse's prompt tokens that Muse's own API served from its cache (priced here at full rate)."""
+async def ledger_facts(url: str, run_id: str, bench: str) -> tuple[float, int, float]:
+    """The memory build's wall time (first to last ingest call) and its number of calls, and the
+    share of full-context Muse's prompt tokens that Muse's own API served from its cache (priced
+    here at full rate)."""
     async with await psycopg.AsyncConnection.connect(url) as conn:
         cur = await conn.execute(
-            "SELECT extract(epoch FROM max(created_at) - min(created_at)) FROM usage"
+            "SELECT extract(epoch FROM max(created_at) - min(created_at)), count(*) FROM usage"
             " WHERE route = 'ingest' AND user_id = %s", (f"eval-{run_id}-{bench}-llama_only",))
-        (seconds,) = await cur.fetchone()
+        seconds, calls = await cur.fetchone()
         cur = await conn.execute(
             "SELECT sum(cached_tokens)::float / nullif(sum(prompt_tokens), 0) FROM usage"
             " WHERE route = 'muse_direct' AND user_id = %s", (f"eval-{run_id}-{bench}-muse_direct",))
         (cached,) = await cur.fetchone()
-    return float(seconds or 0.0), float(cached or 0.0)
+    return float(seconds or 0.0), int(calls), float(cached or 0.0)
+
+
+def auc(score: list[float], positive: list[bool]) -> float:
+    """P(a random positive scores above a random negative), ties counted half."""
+    s, y = np.asarray(score, float), np.asarray(positive, bool)
+    pos, neg = s[y], s[~y]
+    return float(((pos[:, None] > neg).sum() + 0.5 * (pos[:, None] == neg).sum()) / (len(pos) * len(neg)))
+
+
+def team(build_s: float, calls: int) -> dict:
+    """Ingest per engineer in the latest real replay, shared and alone, priced per ingest call."""
+    usd_per_call = build_s / calls * H100_USD_PER_S
+    out = {"usd_per_ingest_call": usd_per_call}
+    for order in ("related", "random"):
+        for baseline, label in (("rule_gate", "shared"), ("no_sharing", "alone")):
+            path = max(RESULTS.glob(f"replay_{baseline}_{order}_*.csv"))
+            rows = [r for r in csv.DictReader(path.open()) if r["simulated"] == "False"]
+            out[f"{order}_{label}"] = [
+                {"team_size": int(r["team_size"]), "pages_per_engineer": float(r["ingest_pages_per_user"]),
+                 "ingest_usd_per_engineer": float(r["ingest_pages_per_user"]) * usd_per_call,
+                 "muse_tokens_per_engineer": float(r["muse_tokens_per_user"]),
+                 "ingest_seconds_per_engineer": float(r["ingest_seconds_per_user"])}
+                for r in sorted(rows, key=lambda r: int(r["team_size"]))]
+    return out
 
 
 def option(name: str, right, muse_usd, gpu_s, seconds, escalated, *, memory: bool,
@@ -88,13 +120,18 @@ async def main(args) -> None:
     cascade_out_of_fold(rows, list(CONFIDENCE_FEATURES))
     saved = json.loads((RESULTS / f"gate_{args.id}.json").read_text())
     rng = np.random.default_rng(SEED)
+    path = RESULTS / f"routellm_bert_{args.id}.jsonl"
+    scores = ({(s["bench"], s["item"]): s["strong_win_rate"] for s in map(json.loads, path.open())}
+              if path.exists() else {})
 
     report = {"run_id": args.id, "h100_usd_per_s": H100_USD_PER_S,
               "muse_usd_per_m": [settings.muse_input_price_per_m, settings.muse_output_price_per_m],
               "benchmarks": {}}
     for bench in BENCHES:
         rs = [r for r in rows if r["bench"] == bench]
-        build_s, muse_cached = await ledger_facts(url, args.id, bench)
+        build_s, calls, muse_cached = await ledger_facts(url, args.id, bench)
+        if bench == "swebench":
+            report["team"] = team(build_s, calls)
         draft_s = np.array([r["draft"].seconds for r in rs])
 
         def fixed(baseline: str, *, memory: bool, gpu: bool = False, rs=rs, bench=bench):
@@ -149,6 +186,34 @@ async def main(args) -> None:
             out["options"].append(option(f"Itara cascade, {float(budget):.0%} budget", *composed(picked, True),
                                          memory=True, build_s=build_s,
                                          note="" if budget == "0.1" else "budget chosen after the run"))
+        if scores:
+            win = [scores[(bench, r["item"])] for r in rs]
+            ref_spent = sum(direct[r["item"]].muse_prompt_tokens + direct[r["item"]].muse_completion_tokens
+                            for r in rs)
+            order = np.argsort(win)[::-1]  # most likely to need Muse first
+            draft_wrong = [not r["correct"][LOCAL] for r in rs]
+            out["router_auc"] = {"routellm_bert": auc(win, draft_wrong),
+                                 "itara_cascade": auc([-r["p_draft"] for r in rs], draft_wrong)}
+            for budget in (0.1, 0.2):
+                best = None
+                for k in range(len(rs) + 1):
+                    up = set(order[:k].tolist())
+                    picked = [r["escalate_to"] if i in up else LOCAL for i, r in enumerate(rs)]
+                    spent = sum(r["prompt"][p] + r["completion"][p] for r, p in zip(rs, picked))
+                    right = np.mean([r["correct"][p] for r, p in zip(rs, picked)])
+                    if spent <= budget * ref_spent and (best is None or right > best[0]):
+                        best = (right, picked)
+                picked = best[1]
+                chosen = [r["results"][p] for r, p in zip(rs, picked)]
+                kept = np.array([p == LOCAL for p in picked])
+                out["options"].append(option(
+                    f"RouteLLM router, {budget:.0%} budget",
+                    [r["correct"][p] for r, p in zip(rs, picked)],
+                    [price(c.muse_prompt_tokens, c.muse_completion_tokens) for c in chosen],
+                    draft_s * kept, np.where(kept, draft_s, [c.seconds for c in chosen]), ~kept,
+                    memory=True, build_s=build_s,
+                    note="off the shelf, decides before any draft; threshold chosen on these items"
+                         + ("" if budget == 0.1 else "; budget chosen after the run")))
         report["benchmarks"][bench] = out
 
     path = RESULTS / f"cost_compare_{args.id}.json"
@@ -162,6 +227,12 @@ async def main(args) -> None:
             print(f"  {o['name']:34} {o['accuracy']:6.1%} {o['escalated']:5.0%} {o['muse_usd_per_1k']:7.2f}"
                   f" {o['gpu_usd_per_1k']:6.2f} {o['usd_per_1k']:7.2f} {o['usd_per_1k_correct']:8.2f}"
                   f" {o['seconds_median']:6.1f} {o['seconds_mean']:6.1f} {o['seconds_p90']:6.1f}")
+        if "router_auc" in out:
+            print("  AUC for 'Llama's draft is wrong':", {k: round(v, 3) for k, v in out["router_auc"].items()})
+    for order in ("related", "random"):
+        print(f"\nteam replay, {order} tasks: ingest $ per engineer (shared / alone)")
+        for s, a in zip(report["team"][f"{order}_shared"], report["team"][f"{order}_alone"]):
+            print(f"  {s['team_size']:>2} engineers: ${s['ingest_usd_per_engineer']:.4f} / ${a['ingest_usd_per_engineer']:.4f}")
 
 
 if __name__ == "__main__":

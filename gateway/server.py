@@ -52,6 +52,7 @@ class Services:
     muse_is_standin: bool = False
     ingest_concurrency: int = 1
     gate: LearnedGate | CascadeGate | None = None  # None: the rule-based gate
+    always_escalate: bool = False  # every question to Muse with memory summaries, no gate
     # One limit for the whole process, so concurrent ingests can't multiply it.
     ingest_limit: asyncio.Semaphore | None = field(init=False, default=None)
 
@@ -77,7 +78,8 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
         ingest_concurrency=settings.ingest_concurrency,
-        gate=load_gate(settings.gate_path) if settings.gate_path else None,
+        gate=load_gate(settings.gate_path) if settings.gate_path and not settings.always_escalate else None,
+        always_escalate=settings.always_escalate,
     )
     if isinstance(services.gate, CascadeGate) and settings.gate_threshold is not None:
         services.gate.threshold = settings.gate_threshold
@@ -254,6 +256,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             question = last_user_text(body["messages"])
             hits = await s.store.search(scope, question)
             route = route_override(request, principal)
+            if route is None and s.always_escalate:
+                route = Route.ESCALATE_COMPACT
             if route is None and s.gate is not None:
                 # Cascade: Llama drafts with memory; the gate keeps the draft or escalates.
                 local = await prepare(s, scope, Route.LOCAL_MEMORY, body, hits)
@@ -307,7 +311,8 @@ def create_app(services: Services | None = None) -> FastAPI:
         return {"spent_usd": await s.ledger.spent(), "cap_usd": s.ledger.cap_usd,
                 "muse_model": s.muse.model, "muse_is_standin": s.muse_is_standin,
                 "llama_model": s.llama.model, "llama_backend": s.llama_backend,
-                "gate": type(s.gate).__name__ if s.gate else "rule",
+                "gate": ("always escalate" if s.always_escalate
+                         else type(s.gate).__name__ if s.gate else "rule"),
                 # The KV cache key each team's shared memory is cached under (cache/lmcache.py).
                 "cache_scopes": {t: cache_scope(Scope(t, ""), []) for t in teams},
                 "by_model_route": await s.ledger.summary(), **requests}

@@ -276,7 +276,8 @@ def dollars() -> None:
     labels = {"Muse, full context": "Muse, full context", "Muse + retrieved raw pages": "Muse + raw pages",
               "Muse + team memory": "Muse + team memory", "Rule gate": "Rule gate",
               "Random escalation": "Random escalation", "Itara cascade, 10% budget": "Cascade, 10\\%",
-              "Itara cascade, 20% budget": "Cascade, 20\\%$^\\dagger$"}
+              "Itara cascade, 20% budget": "Cascade, 20\\%$^\\dagger$",
+              "RouteLLM router, 10% budget": "RouteLLM, 10\\%", "RouteLLM router, 20% budget": "RouteLLM, 20\\%$^\\dagger$"}
     lines = [f"{labels[o['name']]} & {p1(o['accuracy'])} & {o['usd_per_1k']:.2f} & {o['usd_per_1k_correct']:.2f}"
              f" & {o['seconds_median']:.1f}\\\\" for o in swe["options"]]
     (OUT / "tab_cost.tex").write_text("\n".join(lines) + "\n")
@@ -285,7 +286,8 @@ def dollars() -> None:
         return next(o for o in bench["options"] if o["name"] == name)
     for key, name in [("Direct", "Muse, full context"), ("Raw", "Muse + retrieved raw pages"),
                       ("Memory", "Muse + team memory"), ("Rule", "Rule gate"), ("Random", "Random escalation"),
-                      ("Cascade", "Itara cascade, 10% budget"), ("CascadeTwenty", "Itara cascade, 20% budget")]:
+                      ("Cascade", "Itara cascade, 10% budget"), ("CascadeTwenty", "Itara cascade, 20% budget"),
+                      ("Router", "RouteLLM router, 10% budget"), ("RouterTwenty", "RouteLLM router, 20% budget")]:
         o = pick(swe, name)
         macro(f"usd{key}", f"{o['usd_per_1k']:.2f}")
         macro(f"usdOk{key}", f"{o['usd_per_1k_correct']:.2f}")
@@ -293,6 +295,15 @@ def dollars() -> None:
         macro(f"pninety{key}", f"{o['seconds_p90']:.1f}")
         macro(f"gpu{key}", f"{o['gpu_usd_per_1k']:.2f}")
         macro(f"muse{key}", f"{o['muse_usd_per_1k']:.2f}")
+        macro(f"acc{key}Cost", p1(o["accuracy"]))
+    for bench, key in ((swe, "Swe"), (loco, "Loco")):
+        macro(f"aucRouter{key}", f"{bench['router_auc']['routellm_bert']:.2f}")
+        macro(f"aucCascade{key}", f"{bench['router_auc']['itara_cascade']:.2f}")
+    macro("accLocoRouter", p1(pick(loco, "RouteLLM router, 10% budget")["accuracy"]))
+    macro("accLocoCascadeCost", p1(pick(loco, "Itara cascade, 10% budget")["accuracy"]))
+    shared, alone = cost["team"]["related_shared"][-1], cost["team"]["related_alone"][-1]
+    macro("teamIngestShared", f"{shared['ingest_usd_per_engineer']:.4f}")
+    macro("teamIngestAlone", f"{alone['ingest_usd_per_engineer']:.4f}")
     direct, memory, cascade = (pick(swe, n) for n in ("Muse, full context", "Muse + team memory",
                                                        "Itara cascade, 10% budget"))
     macro("accRandomCount", p1(pick(swe, "Random escalation")["accuracy"]))

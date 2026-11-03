@@ -50,6 +50,8 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 | Muse at minimal reasoning effort, and its intervals | Done (1 Nov; analysed 3 Nov). Chosen after the results, and reported as such. |
 | `itara` CLI, dashboard (Vite + React), README | Done (3 Nov) |
 | Paper (`paper/`) | Done (3 Nov) |
+| Cost per question, and comparison with simpler options and RouteLLM's router (`eval/cost_compare.py`) | Done (3 Nov). Analyses of the saved answers, added after the results. |
+| `itara up --mode accurate / fast / rule` | Done (3 Nov) |
 | Demo video | Planned (3–4 Nov) |
 
 The north star set in the plan (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, and Muse's minimal reasoning effort, were chosen after the results and are labelled that way everywhere they appear.

@@ -109,9 +109,41 @@
           "seconds_median": 10.969934374908917,
           "seconds_mean": 13.215696781252046,
           "seconds_p90": 23.57919557923451
+        },
+        {
+          "name": "RouteLLM router, 10% budget",
+          "note": "off the shelf, decides before any draft; threshold chosen on these items",
+          "accuracy": 0.6833333333333333,
+          "escalated": 0.43666666666666665,
+          "muse_usd_per_1k": 5.900871666666667,
+          "gpu_usd_per_1k": 3.9483913830262494,
+          "memory_build_usd_per_1k": 2.8626185198166674,
+          "usd_per_1k": 9.849263049692917,
+          "usd_per_1k_correct": 14.413555682477439,
+          "seconds_median": 1.2554989999625832,
+          "seconds_mean": 6.210085491119728,
+          "seconds_p90": 15.287983491970234
+        },
+        {
+          "name": "RouteLLM router, 20% budget",
+          "note": "off the shelf, decides before any draft; threshold chosen on these items; budget chosen after the run",
+          "accuracy": 0.8233333333333334,
+          "escalated": 0.88,
+          "muse_usd_per_1k": 11.5832625,
+          "gpu_usd_per_1k": 3.0035829567318335,
+          "memory_build_usd_per_1k": 2.8626185198166674,
+          "usd_per_1k": 14.586845456731833,
+          "usd_per_1k_correct": 17.716816344208702,
+          "seconds_median": 8.74841868749354,
+          "seconds_mean": 10.446800603323306,
+          "seconds_p90": 19.611612175591297
         }
       ],
-      "muse_direct_usd_per_1k_without_runaways": 29.751683724832215
+      "muse_direct_usd_per_1k_without_runaways": 29.751683724832215,
+      "router_auc": {
+        "routellm_bert": 0.5300976993381658,
+        "itara_cascade": 0.6466615640898654
+      }
     },
     "locomo": {
       "items": 300,
@@ -216,9 +248,192 @@
           "seconds_median": 4.2697650423506275,
           "seconds_mean": 4.8088420136428125,
           "seconds_p90": 7.32059580059723
+        },
+        {
+          "name": "RouteLLM router, 10% budget",
+          "note": "off the shelf, decides before any draft; threshold chosen on these items",
+          "accuracy": 0.5433333333333333,
+          "escalated": 0.6366666666666667,
+          "muse_usd_per_1k": 4.2159466666666665,
+          "gpu_usd_per_1k": 0.8097340514326593,
+          "memory_build_usd_per_1k": 0.6404652653966668,
+          "usd_per_1k": 5.025680718099326,
+          "usd_per_1k_correct": 9.249719113066243,
+          "seconds_median": 2.682244791998528,
+          "seconds_mean": 2.7623888354267305,
+          "seconds_p90": 5.678771378821694
+        },
+        {
+          "name": "RouteLLM router, 20% budget",
+          "note": "off the shelf, decides before any draft; threshold chosen on these items; budget chosen after the run",
+          "accuracy": 0.6266666666666667,
+          "escalated": 1.0,
+          "muse_usd_per_1k": 6.655648333333333,
+          "gpu_usd_per_1k": 0.6404652653966667,
+          "memory_build_usd_per_1k": 0.6404652653966668,
+          "usd_per_1k": 7.29611359873,
+          "usd_per_1k_correct": 11.64273446605851,
+          "seconds_median": 3.5834055829327554,
+          "seconds_mean": 4.056143711267505,
+          "seconds_p90": 6.5005670875776564
         }
       ],
-      "muse_direct_usd_per_1k_without_runaways": 27.219243333333335
+      "muse_direct_usd_per_1k_without_runaways": 27.219243333333335,
+      "router_auc": {
+        "routellm_bert": 0.5476380728554642,
+        "itara_cascade": 0.7420446533490012
+      }
     }
+  },
+  "team": {
+    "usd_per_ingest_call": 0.00014164366748226954,
+    "related_shared": [
+      {
+        "team_size": 1,
+        "pages_per_engineer": 67.0,
+        "ingest_usd_per_engineer": 0.009490125721312059,
+        "muse_tokens_per_engineer": 7061.0,
+        "ingest_seconds_per_engineer": 135.61775475158356
+      },
+      {
+        "team_size": 2,
+        "pages_per_engineer": 57.5,
+        "ingest_usd_per_engineer": 0.008144510880230499,
+        "muse_tokens_per_engineer": 8104.0,
+        "ingest_seconds_per_engineer": 28.63886618881952
+      },
+      {
+        "team_size": 4,
+        "pages_per_engineer": 51.25,
+        "ingest_usd_per_engineer": 0.007259237958466314,
+        "muse_tokens_per_engineer": 7517.75,
+        "ingest_seconds_per_engineer": 26.216143384983297
+      },
+      {
+        "team_size": 8,
+        "pages_per_engineer": 42.25,
+        "ingest_usd_per_engineer": 0.005984444951125888,
+        "muse_tokens_per_engineer": 7843.25,
+        "ingest_seconds_per_engineer": 23.310975020605838
+      },
+      {
+        "team_size": 16,
+        "pages_per_engineer": 43.8125,
+        "ingest_usd_per_engineer": 0.006205763181566935,
+        "muse_tokens_per_engineer": 8060.9375,
+        "ingest_seconds_per_engineer": 44.397415742467274
+      }
+    ],
+    "related_alone": [
+      {
+        "team_size": 1,
+        "pages_per_engineer": 67.0,
+        "ingest_usd_per_engineer": 0.009490125721312059,
+        "muse_tokens_per_engineer": 8618.0,
+        "ingest_seconds_per_engineer": 31.043968585086986
+      },
+      {
+        "team_size": 2,
+        "pages_per_engineer": 60.0,
+        "ingest_usd_per_engineer": 0.008498620048936173,
+        "muse_tokens_per_engineer": 8370.5,
+        "ingest_seconds_per_engineer": 29.405727959354408
+      },
+      {
+        "team_size": 4,
+        "pages_per_engineer": 59.5,
+        "ingest_usd_per_engineer": 0.008427798215195037,
+        "muse_tokens_per_engineer": 7314.0,
+        "ingest_seconds_per_engineer": 31.103676771046594
+      },
+      {
+        "team_size": 8,
+        "pages_per_engineer": 58.25,
+        "ingest_usd_per_engineer": 0.008250743630842201,
+        "muse_tokens_per_engineer": 7146.375,
+        "ingest_seconds_per_engineer": 34.845435113529675
+      },
+      {
+        "team_size": 16,
+        "pages_per_engineer": 58.4375,
+        "ingest_usd_per_engineer": 0.008277301818495127,
+        "muse_tokens_per_engineer": 23319.875,
+        "ingest_seconds_per_engineer": 68.17204235692043
+      }
+    ],
+    "random_shared": [
+      {
+        "team_size": 1,
+        "pages_per_engineer": 56.0,
+        "ingest_usd_per_engineer": 0.007932045379007095,
+        "muse_tokens_per_engineer": 1831.0,
+        "ingest_seconds_per_engineer": 101.34743658197112
+      },
+      {
+        "team_size": 2,
+        "pages_per_engineer": 57.0,
+        "ingest_usd_per_engineer": 0.008073689046489365,
+        "muse_tokens_per_engineer": 2852.5,
+        "ingest_seconds_per_engineer": 23.640257707447745
+      },
+      {
+        "team_size": 4,
+        "pages_per_engineer": 56.75,
+        "ingest_usd_per_engineer": 0.008038278129618796,
+        "muse_tokens_per_engineer": 1357.25,
+        "ingest_seconds_per_engineer": 25.952724812785164
+      },
+      {
+        "team_size": 8,
+        "pages_per_engineer": 53.0,
+        "ingest_usd_per_engineer": 0.007507114376560286,
+        "muse_tokens_per_engineer": 4810.625,
+        "ingest_seconds_per_engineer": 34.73937800049316
+      },
+      {
+        "team_size": 16,
+        "pages_per_engineer": 51.875,
+        "ingest_usd_per_engineer": 0.007347765250642732,
+        "muse_tokens_per_engineer": 5022.8125,
+        "ingest_seconds_per_engineer": 55.26872413238743
+      }
+    ],
+    "random_alone": [
+      {
+        "team_size": 1,
+        "pages_per_engineer": 56.0,
+        "ingest_usd_per_engineer": 0.007932045379007095,
+        "muse_tokens_per_engineer": 3043.0,
+        "ingest_seconds_per_engineer": 24.08734754100442
+      },
+      {
+        "team_size": 2,
+        "pages_per_engineer": 58.0,
+        "ingest_usd_per_engineer": 0.008215332713971634,
+        "muse_tokens_per_engineer": 2658.0,
+        "ingest_seconds_per_engineer": 23.29734664573334
+      },
+      {
+        "team_size": 4,
+        "pages_per_engineer": 57.75,
+        "ingest_usd_per_engineer": 0.008179921797101065,
+        "muse_tokens_per_engineer": 1380.5,
+        "ingest_seconds_per_engineer": 28.82929417595733
+      },
+      {
+        "team_size": 8,
+        "pages_per_engineer": 55.0,
+        "ingest_usd_per_engineer": 0.007790401711524825,
+        "muse_tokens_per_engineer": 3715.875,
+        "ingest_seconds_per_engineer": 36.589480531343725
+      },
+      {
+        "team_size": 16,
+        "pages_per_engineer": 55.4375,
+        "ingest_usd_per_engineer": 0.007852370816048318,
+        "muse_tokens_per_engineer": 4498.375,
+        "ingest_seconds_per_engineer": 63.482797051765374
+      }
+    ]
   }
 }
