@@ -25,7 +25,7 @@ uv run itara dashboard
 
 > Every engineer on a team sends the same codebase, docs and decisions to an expensive closed model, over and over. The company pays for the same context once per person, per question.
 >
-> Itara is a self-hosted gateway a whole team shares. On code, it already matches the closed model's accuracy with about a quarter of the tokens, and every extra teammate makes it cheaper.
+> Itara is a self-hosted gateway a whole team shares. On code, it cuts the closed-model bill by 57% at the same accuracy. In fast mode it cuts 68%, and answers come back in about two seconds instead of twelve.
 
 ## 0:20–0:40 · What it is
 
@@ -67,11 +67,11 @@ uv run itara dashboard
 
 > We ran all 300 SWE-bench Lite issues and 300 LoCoMo conversation questions on the real models.
 >
-> On code, Itara works. With the team's memory, Muse matches its full-context accuracy, 86.3% against 86%, at about a quarter of the tokens. It reads under a tenth of the context. Most of what's left is Muse's own reasoning.
+> On code, Itara works. With the team's memory, Muse matches its full-context accuracy, 86.3% against 86%, for 57% less, GPU included. It reads under a tenth of the context. In fast mode, Llama answers what it's sure of: 68% less, with a median answer in 2.3 seconds, at 74%.
 
 **[Code chart: the cascade curve]**
 
-> And the gate has a real signal. Llama's own confidence tells its right answers from its wrong ones, with an AUC of 0.68 on code and 0.8 on conversations.
+> Why not an off-the-shelf router? RouteLLM decides from the question alone, and it can barely tell when Llama will be wrong. Llama's own confidence can: on a tight budget that's 74% against 68%.
 
 **[Scroll to Sharing across a team]**
 
@@ -104,5 +104,5 @@ Don't say "it passes" or "we hit 10%". The full analysis is in `results/full_run
 ## Checks
 
 - The numbers match `dashboard/results.json` (default effort), `results/full_run.ipynb` and the README.
-- Say "about a quarter of the tokens", not "23%": two runaway Muse answers inflate the denominator.
+- Say "57% less" (cost with the GPU included) or "about a quarter of the tokens", not "23%": two runaway Muse answers inflate the token denominator.
 - Lead with what works, but keep "not there yet" for the north star and "chosen after the run" for the 25% point. Judges will check the numbers against the repo.
