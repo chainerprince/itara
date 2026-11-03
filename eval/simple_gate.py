@@ -19,8 +19,14 @@ second opinion (the other open model's draft) exists only there.
   differ (folds are whole repositories, with different shares of right drafts); for a single
   signal that is mostly near 0, the fold then decides the ranking more than the signal does,
   and the fitted self-check scores at chance. Ranking by the raw signal needs no fitting.
+- **Sharper probes** (eval/exact_probe.py), where a run has them: the self-check and resample
+  agreement of the exact scored draft, and a check that sees the memory about the file the
+  draft names. Unfitted sums, and the probes fitted together like the cascade.
 - **Thresholds:** the most accurate within each budget, chosen on these items (as the paper's
   cascade numbers are), and chosen on the other folds (nothing chooses its own route).
+- **Over budget:** the other folds' threshold can spend more than the budget on a fold (a score
+  with many ties, such as a check that answers a confident "yes" for most drafts, escalates
+  every tie). Such results are marked "!" and are not comparable.
 - **Intervals:** paired bootstrap (4,000 resamples, seed 0) of each gate's accuracy minus the
   cascade's, at the 10% budget.
 
@@ -36,6 +42,7 @@ import json
 import numpy as np
 
 from eval.common import RESULTS
+from eval.exact_probe import load_exact
 from eval.learn_gate import (CONFIDENCE_FEATURES, Ledger, Route, cascade_out_of_fold, folds,
                              load_rows, run_results)
 from gateway.config import Settings
@@ -107,6 +114,11 @@ async def main(args) -> None:
             mine = files(r["draft"].answer)
             r["features"]["files_named"] = float(len(mine))
             r["features"]["second_opinion_agrees"] = float(mine[:1] == files(other[r["item"]].answer)[:1])
+        exact = load_exact(run_id)
+        if exact:
+            rows = [r for r in rows if r["item"] in exact]
+            for r in rows:
+                r["features"] |= exact[r["item"]]["features"]
         spent_ref = np.array([refs["muse_direct"][r["item"]].muse_prompt_tokens
                               + refs["muse_direct"][r["item"]].muse_completion_tokens for r in rows], float)
         gates = {"cascade (6 signals, shipped)": list(CONFIDENCE_FEATURES),
@@ -116,7 +128,18 @@ async def main(args) -> None:
                  "self-check": ["self_check"],
                  "self-check + files named": ["self_check", "files_named"],
                  "self-check + files named + second opinion": ["self_check", "files_named", "second_opinion_agrees"]}
-        out = {"label": spec["label"], "items": len(rows), "draft_right": float(np.mean([r["correct"][LOCAL] for r in rows])),
+        if exact:
+            gates |= {
+                "exact self-check (no fitting)": lambda r: r["features"]["exact_self_check"],
+                "evidence check (no fitting)": lambda r: r["features"]["evidence_check"],
+                "exact self-check + evidence check (no fitting)":
+                    lambda r: r["features"]["exact_self_check"] + r["features"]["evidence_check"],
+                "exact self-check + evidence + second opinion (no fitting)":
+                    lambda r: (r["features"]["exact_self_check"] + r["features"]["evidence_check"]
+                               + r["features"]["second_opinion_agrees"]),
+                "exact probes, fitted (3 signals)": ["exact_self_check", "exact_same_answer", "evidence_check"],
+            }
+        out = {"label": spec["label"], "items": len(rows), "exact_probes": bool(exact), "draft_right": float(np.mean([r["correct"][LOCAL] for r in rows])),
                "muse_direct": float(np.mean([bool(refs["muse_direct"][r["item"]].score.get("hit")) for r in rows])),
                "gates": {}}
         base = {}
@@ -159,7 +182,8 @@ async def main(args) -> None:
             cells = []
             for b in BUDGETS:
                 s, o, v = (g[f"{b:g}"][k] for k in ("threshold_on_these_items", "threshold_on_other_folds", "vs_cascade"))
-                cells.append(f"{s['accuracy']:.1%} ({o['accuracy']:.1%} nested) {100 * v['points']:+.1f}")
+                over = "!" if o["share"] > b + 0.005 else " "
+                cells.append(f"{s['accuracy']:.1%} ({o['accuracy']:.1%}{over}nested) {100 * v['points']:+.1f}")
             print(f"  {name:54} {g['auc']:5.3f}  " + "  ".join(f"{c:>28}" for c in cells))
         for name, g in out["gates"].items():
             if name.startswith("cascade"):

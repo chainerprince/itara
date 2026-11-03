@@ -39,6 +39,7 @@ All of this is explained, with intervals, in the notebook and the paper.
 | `handcheck_locomo_full1.csv` | 50 LoCoMo judge verdicts checked by hand (48 agree). |
 | `effort_check_full1-minimal.json` | Intervals for the minimal-effort result (`eval/effort_check.py`). |
 | `cost_compare_full1.json` | Dollars (Muse and GPU) and latency per question for each option, including simpler alternatives, RouteLLM's router and team-scale ingest dollars (`eval/cost_compare.py`). |
+| `raw/swebench_exact_probe_<run id>.jsonl` | The self-check on the exact scored draft, and a check that shows the model the memory about the file the draft names (`eval/exact_probe.py`). |
 | `simple_gate.json` | Simpler gates (the self-check alone, and with a second opinion from the other open model) against the cascade, on code (`eval/simple_gate.py`). |
 | `routellm_bert_full1.jsonl` | RouteLLM's BERT router score for each question (`eval/routellm_scores.py`). |
 

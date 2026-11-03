@@ -356,6 +356,12 @@ def bigger() -> None:
         macro(f"second{key}GainLo", signed(v["interval"][0]))
         macro(f"second{key}GainHi", signed(v["interval"][1]))
         macro(f"second{key}GainP", f"{100 * v['p_better']:.0f}")
+    for key, name in (("ExactSelf", "exact self-check (no fitting)"), ("Evidence", "evidence check (no fitting)"),
+                      ("SelfEvidence", "exact self-check + evidence check (no fitting)")):
+        g = simple["big1"]["gates"][name]
+        macro(f"big{key}Auc", f"{g['auc']:.2f}")
+        macro(f"big{key}Ten", p1(g["0.1"]["threshold_on_these_items"]["accuracy"]))
+    macro("smallEvidenceAuc", f"{simple['full1']['gates']['evidence check (no fitting)']['auc']:.2f}")
     raw = simple["big1"]["gates"]["self-check, raw (no fitting)"]
     macro("rawSelfBigAuc", f"{raw['auc']:.2f}")
     macro("rawSelfBigTen", p1(raw["0.1"]["threshold_on_these_items"]["accuracy"]))

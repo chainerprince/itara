@@ -8,6 +8,7 @@
     "full1": {
       "label": "Llama 3.1 8B",
       "items": 300,
+      "exact_probes": true,
       "draft_right": 0.5566666666666666,
       "muse_direct": 0.86,
       "gates": {
@@ -290,12 +291,237 @@
               "p_better": 0.32725
             }
           }
+        },
+        "exact self-check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.6109135113232183,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.6866666666666666,
+              "share": 0.09888917551026938,
+              "kept": 0.6333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.6866666666666666,
+              "share": 0.10134758708124117,
+              "kept": 0.6233333333333333
+            },
+            "vs_cascade": {
+              "points": -0.05666666666666664,
+              "interval": [
+                -0.09999999999999998,
+                -0.013333333333333308
+              ],
+              "p_better": 0.00225
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8333333333333334,
+              "share": 0.19950747781850467,
+              "kept": 0.16000000000000003
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.83,
+              "share": 0.1985810241981767,
+              "kept": 0.16666666666666663
+            },
+            "vs_cascade": {
+              "points": 0.00666666666666671,
+              "interval": [
+                -0.01333333333333342,
+                0.030000000000000027
+              ],
+              "p_better": 0.65625
+            }
+          }
+        },
+        "evidence check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.5312232677502139,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.71,
+              "share": 0.09897416208239099,
+              "kept": 0.5433333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8066666666666666,
+              "share": 0.1547659469803771,
+              "kept": 0.30666666666666664
+            },
+            "vs_cascade": {
+              "points": -0.033333333333333326,
+              "interval": [
+                -0.08000000000000007,
+                0.013333333333333308
+              ],
+              "p_better": 0.07025
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8166666666666667,
+              "share": 0.192315614132967,
+              "kept": 0.15333333333333332
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8566666666666667,
+              "share": 0.22340870142517483,
+              "kept": 0.033333333333333326
+            },
+            "vs_cascade": {
+              "points": -0.010000000000000009,
+              "interval": [
+                -0.043333333333333335,
+                0.023333333333333317
+              ],
+              "p_better": 0.2465
+            }
+          }
+        },
+        "exact self-check + evidence check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.5934897123047139,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7133333333333334,
+              "share": 0.09951667636513431,
+              "kept": 0.56
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.6866666666666666,
+              "share": 0.08811647759653975,
+              "kept": 0.6233333333333333
+            },
+            "vs_cascade": {
+              "points": -0.029999999999999916,
+              "interval": [
+                -0.07666666666666666,
+                0.016666666666666607
+              ],
+              "p_better": 0.08825
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.82,
+              "share": 0.18466642270521258,
+              "kept": 0.21666666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8266666666666667,
+              "share": 0.19205425542764243,
+              "kept": 0.18333333333333335
+            },
+            "vs_cascade": {
+              "points": -0.00666666666666671,
+              "interval": [
+                -0.036666666666666625,
+                0.020000000000000018
+              ],
+              "p_better": 0.2845
+            }
+          }
+        },
+        "exact self-check + evidence + second opinion (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.7048759623609923,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7466666666666667,
+              "share": 0.09877779310868882,
+              "kept": 0.6233333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7533333333333333,
+              "share": 0.0997920328588083,
+              "kept": 0.6233333333333333
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333334103,
+              "interval": [
+                -0.033333333333333326,
+                0.040000000000000036
+              ],
+              "p_better": 0.5365
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8466666666666667,
+              "share": 0.19893796780108744,
+              "kept": 0.15666666666666662
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8366666666666667,
+              "share": 0.18381555714197156,
+              "kept": 0.23333333333333328
+            },
+            "vs_cascade": {
+              "points": 0.020000000000000018,
+              "interval": [
+                -0.0033333333333334103,
+                0.043333333333333335
+              ],
+              "p_better": 0.93075
+            }
+          }
+        },
+        "exact probes, fitted (3 signals)": {
+          "features": [
+            "exact_self_check",
+            "exact_same_answer",
+            "evidence_check"
+          ],
+          "auc": 0.6364864256449507,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7066666666666667,
+              "share": 0.09989781614504908,
+              "kept": 0.6333333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.6966666666666667,
+              "share": 0.09742120744922303,
+              "kept": 0.6433333333333333
+            },
+            "vs_cascade": {
+              "points": -0.036666666666666625,
+              "interval": [
+                -0.07666666666666666,
+                0.0
+              ],
+              "p_better": 0.02225
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8333333333333334,
+              "share": 0.19886038005995052,
+              "kept": 0.17333333333333334
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.83,
+              "share": 0.1973766144949098,
+              "kept": 0.18333333333333335
+            },
+            "vs_cascade": {
+              "points": 0.00666666666666671,
+              "interval": [
+                -0.01666666666666672,
+                0.030000000000000027
+              ],
+              "p_better": 0.66225
+            }
+          }
         }
       }
     },
     "big1": {
       "label": "Llama 3.3 70B",
       "items": 300,
+      "exact_probes": true,
       "draft_right": 0.67,
       "muse_direct": 0.86,
       "gates": {
@@ -576,6 +802,230 @@
                 0.023333333333333317
               ],
               "p_better": 0.5675
+            }
+          }
+        },
+        "exact self-check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.6852605658575808,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7933333333333333,
+              "share": 0.09842844830516778,
+              "kept": 0.5966666666666667
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7966666666666666,
+              "share": 0.08861119943048998,
+              "kept": 0.6366666666666667
+            },
+            "vs_cascade": {
+              "points": 0.01666666666666672,
+              "interval": [
+                -0.023333333333333317,
+                0.056666666666666754
+              ],
+              "p_better": 0.7835
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.86,
+              "share": 0.1828329123998408,
+              "kept": 0.22666666666666668
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8566666666666667,
+              "share": 0.1806856516670366,
+              "kept": 0.23333333333333328
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333332993,
+              "interval": [
+                -0.020000000000000018,
+                0.026666666666666727
+              ],
+              "p_better": 0.563
+            }
+          }
+        },
+        "evidence check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.5969144178099401,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.7633333333333333,
+              "share": 0.088660991563333,
+              "kept": 0.6633333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7733333333333333,
+              "share": 0.09434209394915603,
+              "kept": 0.64
+            },
+            "vs_cascade": {
+              "points": -0.013333333333333308,
+              "interval": [
+                -0.046666666666666634,
+                0.019999999999999907
+              ],
+              "p_better": 0.183
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8366666666666667,
+              "share": 0.1911094047140552,
+              "kept": 0.18999999999999995
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8633333333333333,
+              "share": 0.22954613171118962,
+              "kept": 0.0
+            },
+            "vs_cascade": {
+              "points": -0.020000000000000018,
+              "interval": [
+                -0.043333333333333335,
+                0.0033333333333332993
+              ],
+              "p_better": 0.03375
+            }
+          }
+        },
+        "exact self-check + evidence check (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.6706367154128348,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.78,
+              "share": 0.09597203641824592,
+              "kept": 0.6433333333333333
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.78,
+              "share": 0.10094245109272734,
+              "kept": 0.6166666666666667
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333334103,
+              "interval": [
+                -0.029999999999999916,
+                0.03333333333333344
+              ],
+              "p_better": 0.55875
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.8566666666666667,
+              "share": 0.1627184904785044,
+              "kept": 0.33333333333333337
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.16215597935526188,
+              "kept": 0.33666666666666667
+            },
+            "vs_cascade": {
+              "points": 0.0,
+              "interval": [
+                -0.023333333333333317,
+                0.023333333333333317
+              ],
+              "p_better": 0.43875
+            }
+          }
+        },
+        "exact self-check + evidence + second opinion (no fitting)": {
+          "features": "unfitted",
+          "auc": 0.704708779335645,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.81,
+              "share": 0.09396275388488619,
+              "kept": 0.65
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.81,
+              "share": 0.09659613781022598,
+              "kept": 0.64
+            },
+            "vs_cascade": {
+              "points": 0.03333333333333344,
+              "interval": [
+                -0.0033333333333332993,
+                0.07000000000000006
+              ],
+              "p_better": 0.951
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.86,
+              "share": 0.1758300188570206,
+              "kept": 0.2766666666666666
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8466666666666667,
+              "share": 0.1711315612133283,
+              "kept": 0.30000000000000004
+            },
+            "vs_cascade": {
+              "points": 0.0033333333333332993,
+              "interval": [
+                -0.01666666666666672,
+                0.026666666666666616
+              ],
+              "p_better": 0.563
+            }
+          }
+        },
+        "exact probes, fitted (3 signals)": {
+          "features": [
+            "exact_self_check",
+            "exact_same_answer",
+            "evidence_check"
+          ],
+          "auc": 0.6070656816925474,
+          "0.1": {
+            "threshold_on_these_items": {
+              "accuracy": 0.77,
+              "share": 0.09201606146228895,
+              "kept": 0.6699999999999999
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.7666666666666667,
+              "share": 0.12112506224016606,
+              "kept": 0.53
+            },
+            "vs_cascade": {
+              "points": -0.006666666666666599,
+              "interval": [
+                -0.040000000000000036,
+                0.026666666666666727
+              ],
+              "p_better": 0.3175
+            }
+          },
+          "0.2": {
+            "threshold_on_these_items": {
+              "accuracy": 0.85,
+              "share": 0.1937317903771204,
+              "kept": 0.18000000000000005
+            },
+            "threshold_on_other_folds": {
+              "accuracy": 0.8533333333333334,
+              "share": 0.20292493785981816,
+              "kept": 0.1333333333333333
+            },
+            "vs_cascade": {
+              "points": -0.00666666666666671,
+              "interval": [
+                -0.026666666666666727,
+                0.013333333333333308
+              ],
+              "p_better": 0.21525
             }
           }
         }
