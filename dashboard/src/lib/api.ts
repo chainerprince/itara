@@ -76,6 +76,12 @@ export type Results = {
   scaling: Record<"related" | "random", Record<"shared" | "no_sharing", ScalingRow[]>>;
   kv_cache: { user: string; team: string; seconds: number; reused_tokens: number; note: string }[];
   handcheck: { checked: number; agree: number };
+  /** Code with a larger open model drafting (added after the run); null until that run exists. */
+  open_models: {
+    muse_direct: number;
+    models: { run_id: string; model: string; alone: number; cascade: Record<"0.1" | "0.2", { accuracy: number; share: number; kept: number }> }[];
+    gain: Record<"alone" | "cascade_10", { points: number; interval: [number, number]; p_better: number }>;
+  } | null;
 };
 
 export type Poll = { usage: Usage | null; error: string | null };

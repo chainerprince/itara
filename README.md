@@ -12,6 +12,16 @@ Measured on all 300 SWE-bench Lite issues, with the closed model's tokens and th
 | `itara up` (accurate) | **$16.11** (−57%) | **86.3%** | 9.8 s |
 | `itara up --mode fast` | **$11.87** (−68%) | 74.0% | **2.3 s** |
 
+**A bigger open model makes it better.** With Llama 3.3 70B drafting instead of the 8B (same questions, same memory, same Muse answers; tested after the run):
+
+| Code accuracy | Llama 3.1 8B | Llama 3.3 70B |
+|---|---|---|
+| Llama alone, with team memory | 55.7% | **67.0%** (+11.3 points, 95% interval +6.7 to +16.0) |
+| Fast mode, 10% of Muse's tokens | 74.0% | **77.7%** (+3.7, interval −0.7 to +8.0) |
+| 20% of Muse's tokens | 82.7% | **85.7%**: within 0.3 points of Muse with the full context |
+
+The 70B runs on two H100s, so it costs more GPU time per question.
+
 Itara is a self-hosted gateway that speaks the OpenAI API: any app, chat UI or coding agent uses it by changing its base URL.
 
 ## How it works
@@ -85,6 +95,8 @@ reply = client.chat.completions.create(
 
 Each response says where it went in its `X-Gateway-Route` header: `local_memory` (Llama), `escalate_compact` or `escalate_raw` (Muse with summaries or raw pages), or `passthrough` (requests with tool calls go to Muse unchanged).
 
+To draft with Llama 3.3 70B, deploy it with `MODEL=RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic GPU=H100:2 MODAL_APP=itara-llama-70b modal deploy modal_app.py`, point `LLAMA_*` at it, and start `itara up --gate results/runs/gate_big1_model.json`.
+
 Fast mode uses the cascade trained on the full run (`results/runs/gate_full1_model.json`) at its 10% operating point on code. `GATE_THRESHOLD` moves it between cheaper (lower) and more accurate (higher). `--gate <file>` loads another gate at its own saved threshold.
 
 ## The dashboard
@@ -101,7 +113,7 @@ npm run build    # rebuilds dashboard/dist, which the gateway serves
 
 ## The research behind it
 
-Before building Itara we set a north star: **match the closed model's accuracy while sending it at most 10% of its tokens.** We haven't reached it yet. At 10%, Itara gets 74% on code against 86%. The measurements point to the way there: a router that knew every answer in advance would pass (90.3% at 8.8%), and the 8B open model is the main limit. Most of the results above come from measuring that goal. The goal, every result, the comparisons and their limits are in the paper:
+Before building Itara we set a north star: **match the closed model's accuracy while sending it at most 10% of its tokens.** We haven't reached it yet. At 10%, Itara gets 74% on code against 86%. The measurements point to the way there: a router that knew every answer in advance would pass (90.3% at 8.8%), and the open model is the main limit. Swapping the 8B for a 70B already moves fast mode from 74.0% to 77.7%. Most of the results above come from measuring that goal. The goal, every result, the comparisons and their limits are in the paper:
 
 - **[`paper/itara.pdf`](paper/itara.pdf):** the system, the evaluation on SWE-bench Lite and LoCoMo, the gate, costs, team scaling, and what we chose after seeing results.
 - **[`results/`](results/):** every real run's per-item answers, and the notebooks that analyse them. Nothing there calls a model.
@@ -122,7 +134,7 @@ Before building Itara we set a north star: **match the closed model's accuracy w
 
 ## Roadmap
 
-- **Reach the north star.** Rerun the evaluation with a 70B-class open model on more GPUs, train the gate on more questions, and improve retrieval for conversations.
+- **Reach the north star.** A 70B open model already moves fast mode from 74.0% to 77.7% at 10%. Next: train the gate on more questions, try larger open models, and improve retrieval for conversations.
 - **`pip install itara`.** Publish to PyPI, with the dashboard and schema shipped inside the package.
 - **A one-command self-host.** A Docker Compose file that runs the gateway alongside Postgres.
 - **Better retrieval for conversations.** It is what limits LoCoMo.

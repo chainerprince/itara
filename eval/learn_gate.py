@@ -258,7 +258,9 @@ async def load_rows(args, routes: list[str], price) -> tuple[list[dict], dict, i
     refs = {b: {} for b in REFERENCES}
     rows, mismatched = [], 0
     probes = {b: load_confidence(args.id, b) for b in BENCHES}
-    confident = not args.no_confidence and all(probes.values())
+    # Probes are needed for every benchmark the run drafted (a run may draft only one).
+    drafted = [b for b in BENCHES if run_results(args.id, b, "llama_only")]
+    confident = not args.no_confidence and bool(drafted) and all(probes[b] for b in drafted)
     url = args.database or f"{Settings().database_url.rsplit('/', 1)[0]}/gateway_{args.id.replace('-', '_')}_full"
     async with AsyncConnectionPool(url, configure=register_vector_async) as pool:
         store = MemoryStore(pool, default_embedder())

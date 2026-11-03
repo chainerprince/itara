@@ -1,0 +1,33 @@
+{
+  "run_id": "big1-swebench-llama_only",
+  "bench": "swebench",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "muse_reasoning_effort": "",
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 300,
+  "accuracy": 0.67,
+  "mean_ceiling": 0.33,
+  "mean_recall": 0.67,
+  "in_context_rate": 0.33,
+  "gold_in_hits_rate": 0.33666666666666667,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 307423,
+  "cached_tokens": 28384,
+  "compute_tokens": 290582,
+  "llama_seconds": 326.91,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 300
+  }
+}

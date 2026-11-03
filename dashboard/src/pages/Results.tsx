@@ -22,6 +22,59 @@ const OPTION: Record<string, string> = {
   escalate_raw: "every question to Muse, with raw pages", llama_only: "Llama only", rule_gate: "rule gate",
 };
 
+const MODEL_LABEL: Record<string, string> = {
+  "meta-llama/Llama-3.1-8B-Instruct": "Llama 3.1 8B",
+  "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic": "Llama 3.3 70B",
+};
+
+function OpenModels({ data }: { data: NonNullable<ReturnType<typeof useResults>>["open_models"] & object }) {
+  const [small, big] = data.models;
+  const gain = (g: { points: number; interval: [number, number] }) =>
+    `${points(g.points)} pts (95% interval ${points(g.interval[0])} to ${points(g.interval[1])})`;
+  const rows: [string, (m: typeof small) => number][] = [
+    ["Llama alone, with team memory", (m) => m.alone],
+    ["Itara fast mode, 10% of Muse tokens", (m) => m.cascade["0.1"].accuracy],
+    ["Itara, 20% of Muse tokens", (m) => m.cascade["0.2"].accuracy],
+  ];
+  return (
+    <section className="section">
+      <div className="section-head">
+        <div>
+          <h2>A bigger open model</h2>
+          <p className="quiet" style={{ marginTop: 2 }}>The same 300 code questions, the same memory and the same Muse answers; only the model that drafts changes.</p>
+        </div>
+      </div>
+      <div className="two">
+        <table className="budgets">
+          <thead><tr><th>Code accuracy</th><th>{MODEL_LABEL[small.model] ?? small.model}</th><th>{MODEL_LABEL[big.model] ?? big.model}</th></tr></thead>
+          <tbody>
+            {rows.map(([label, value]) => (
+              <tr key={label}>
+                <td>{label}</td>
+                <td className="acc">{pct(value(small))}</td>
+                <td><span className={`acc${value(big) >= data.muse_direct - 0.03 ? " ok" : ""}`}>{pct(value(big))}</span></td>
+              </tr>
+            ))}
+            <tr><td className="muted">Muse with the full context</td><td className="muted" colSpan={2}>{pct(data.muse_direct)}</td></tr>
+          </tbody>
+        </table>
+        <div className="facts" style={{ gridTemplateColumns: "1fr", gap: 24 }}>
+          <div className="fact">
+            <div className="value">{points(data.gain.alone.points)} pts</div>
+            <p>for the 70B on its own (95% interval {points(data.gain.alone.interval[0])} to {points(data.gain.alone.interval[1])}).</p>
+          </div>
+          <div className="fact">
+            <p>
+              In fast mode {gain(data.gain.cascade_10)}. At 20% of Muse's tokens it comes within {(100 * Math.abs(big.cascade["0.2"].accuracy - data.muse_direct)).toFixed(1)} pts of Muse.
+              Added after the run; 70B in FP8 on two H100s. The 10% north star isn't reached yet.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function Results() {
   const results = useResults();
   const [bench, setBench] = useState<keyof typeof BENCHES>("swebench");
@@ -89,6 +142,8 @@ export function Results() {
           </div>
         </div>
       </section>
+
+      {results.open_models && <OpenModels data={results.open_models} />}
 
       <section className="section">
         <div className="section-head"><h2>Sharing across a team</h2></div>

@@ -24,7 +24,7 @@ import pandas as pd
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
-from scripts.dashboard_data import benchmark
+from scripts.dashboard_data import benchmark, open_models
 
 RUNS = ROOT / "results" / "runs"
 OUT = Path(__file__).parent / "generated"
@@ -320,6 +320,34 @@ def dollars() -> None:
         macro(f"usdLoco{key}", f"{pick(loco, name)['usd_per_1k']:.2f}")
 
 
+def bigger() -> None:
+    """Llama 3.3 70B drafting instead of 8B (run big1, after the run): scripts/dashboard_data.py."""
+    data = open_models(RUN_ID, "big1")
+    small, big = data["models"]
+    gate = json.loads((RUNS / "gate_big1.json").read_text())
+    signed = lambda x: f"{100 * x:+.1f}".replace("-", "$-$")  # noqa: E731
+    macro("bigAlone", p1(big["alone"]))
+    macro("bigCascadeTen", p1(big["cascade"]["0.1"]["accuracy"]))
+    macro("bigGapTen", signed(big["cascade"]["0.1"]["accuracy"] - data["muse_direct"]))
+    macro("bigCascadeTwenty", p1(big["cascade"]["0.2"]["accuracy"]))
+    macro("bigShareTwenty", p1(big["cascade"]["0.2"]["share"]))
+    macro("bigKeptTwenty", f"{100 * big['cascade']['0.2']['kept']:.0f}")
+    macro("bigGapTwenty", f"{100 * abs(big['cascade']['0.2']['accuracy'] - data['muse_direct']):.1f}")
+    macro("smallCascadeTwenty", p1(small["cascade"]["0.2"]["accuracy"]))
+    for key, g in (("Alone", data["gain"]["alone"]), ("Cascade", data["gain"]["cascade_10"])):
+        macro(f"gain{key}", signed(g["points"]))
+        macro(f"gain{key}Lo", signed(g["interval"][0]))
+        macro(f"gain{key}Hi", signed(g["interval"][1]))
+        macro(f"gain{key}P", f"{100 * g['p_better']:.0f}")
+    macro("bigWrong", f"{100 * big['perfect_check']['wrong_drafts']:.0f}")
+    macro("bigPerfect", p1(big["perfect_check"]["accuracy"]))
+    macro("bigPerfectShare", p1(big["perfect_check"]["share"]))
+    macro("bigAuc", f"{gate['cascade']['auc']['swebench']:.2f}")
+    for key, run_id in (("small", RUN_ID), ("big", "big1")):
+        rows = [json.loads(line) for line in (RUNS / "raw" / f"swebench_confidence_{run_id}.jsonl").open()]
+        macro(f"{key}Same", f"{100 * sum(r['same_as_run'] for r in rows) / len(rows):.0f}")
+
+
 def scaling() -> dict:
     latest = {}
     for path in sorted(RUNS.glob("replay_*.csv")):
@@ -410,6 +438,7 @@ def main() -> None:
     budgets(gate)
     effort()
     dollars()
+    bigger()
     data = scaling()
     fig_accuracy(gate)
     fig_scaling(data)
