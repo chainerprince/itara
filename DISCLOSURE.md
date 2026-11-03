@@ -1,6 +1,6 @@
 # Disclosure: pre-existing work vs. hackathon work
 
-**Project:** Memory Gateway: a self-hosted Llama gateway with shared team memory
+**Project:** Itara (built under the working name Memory Gateway): a self-hosted Llama gateway with shared team memory
 **Event:** Meta Global AI Developer Hackathon (hacking window: 26 Oct – 4 Nov 2026, 9:00 PM ET)
 **Repository created:** 26 Oct 2026, inside the hacking window
 
@@ -25,7 +25,7 @@ Source: `chainerprince/ai-os`, commit [`5967f9b`](https://github.com/chainerprin
 |---|---|---|
 | Data models | `src/agent_os/models.py` (126 lines) | Pydantic models for messages and compressed memory "atoms" |
 | Compression logic | `src/agent_os/daemon.py` (331 lines; only the compression part is reused) | Turns batches of messages into compact summaries with keywords |
-| Monitor UI | `examples/rich_chat.py` (122 lines) | Terminal monitor, used as the starting point for the dashboard |
+| Monitor UI | `examples/rich_chat.py` (122 lines) | Terminal monitor, imported as a possible starting point for the dashboard. The final dashboard (`dashboard/`) is a new web app and doesn't use it. |
 
 Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration, router and tests. Those stay in `ai-os`, which remains a separate research project.
 
@@ -36,16 +36,23 @@ Not imported: the `ai-os` Elasticsearch storage, MCP client, Gemini integration,
 | Component | Status |
 |---|---|
 | Project plan (`research/index.html`) and this disclosure | Done (26 Oct) |
-| Llama gateway served with vLLM on Modal | `modal_app.py` written (27 Oct), not yet deployed. Ollama on a laptop stands in. |
-| Escalation to Muse Spark (Meta Model API) | Code done (27 Oct). Tested against a local open model (Llama 3.1 8B) standing in for Muse, not yet against the live API. |
-| OpenAI-compatible gateway server (rule-based gate, tool-call passthrough, API-key identity) | Done (27 Oct); tested with the stock `openai` SDK on local models |
+| OpenAI-compatible gateway server (rule-based gate, tool-call passthrough, API-key identity) | Done (27 Oct) |
 | Shared text memory: Postgres + pgvector with row-level security | Done (27 Oct) |
-| Shared KV cache with permission-scoped keys | Scoped keys done (27 Oct) and shown on Ollama's prefix cache: a teammate reuses the cached prefix, another team doesn't. vLLM + LMCache not yet tested. |
-| Learned escalation gate | Planned |
 | Exact token accounting and spending cap | Done (27 Oct) |
-| Evaluation harness: SWE-bench Lite localisation, LoCoMo subset, team replay | Done (27 Oct). Checked on 28 Oct against a deterministic simulated model (`eval/sim.py`) on all items, using invariant checks (`eval/checks.py`). |
-| Day 6 baselines and results notebook (`eval/day6_results.ipynb`) | Code done (28 Oct). Numbers so far come from simulated or local stand-in models and are labelled as such; not results. |
-| Results, dashboard, write-up, demo video | Planned |
+| Evaluation harness: SWE-bench Lite localisation, LoCoMo, team replay | Done (27 Oct); checked against a deterministic simulated model with invariant checks (28 Oct) |
+| Llama 3.1 8B served with vLLM on Modal (`modal_app.py`) | Deployed (29 Oct) |
+| Escalation to Muse Spark 1.2 (Meta Model API) | Done; live API from 29 Oct |
+| Shared KV cache with permission-scoped keys | Done: on the H100 deployment a teammate reused 6,144 cached prompt tokens and another team 0 (`scripts/cache_check.py`). LMCache across several servers not tested. |
+| Concurrent ingest check, memory fixes for dates | Done (29–30 Oct, `results/bringup.ipynb`) |
+| Full run on the real models: 300 SWE-bench Lite issues, 300 LoCoMo questions, team replay | Done (30–31 Oct, `results/full_run.ipynb`) |
+| Learned gates: per-route gate and the cascade gate on Llama's confidence | Done (31 Oct) |
+| LoCoMo judge hand check (50 verdicts) | Done (31 Oct): 48 of 50 agree |
+| Muse at minimal reasoning effort, and its intervals | Done (1 Nov; analysed 3 Nov). Chosen after the results, and reported as such. |
+| `itara` CLI, dashboard (Vite + React), README | Done (3 Nov) |
+| Paper (`paper/`) | Done (3 Nov) |
+| Demo video | Planned (3–4 Nov) |
+
+The north star set in the plan (within 3 points of Muse with the full context at ≤ 10% of its tokens) was **not met**. Budgets of 20% and 25%, and Muse's minimal reasoning effort, were chosen after the results and are labelled that way everywhere they appear.
 
 The Official Rules still need to be read and the pre-existing-work wording confirmed.
 
@@ -57,7 +64,8 @@ Used as dependencies, not authored by us. Each is used under its own license.
 
 - **Models:** Meta Llama open weights (Llama license); Muse Spark via the Meta Model API
 - **Serving and caching:** vLLM, LMCache
-- **Storage:** PostgreSQL, pgvector
+- **Storage and retrieval:** PostgreSQL, pgvector; BAAI bge-small-en-v1.5 embeddings via fastembed
+- **Dashboard:** React, React Router, Vite
 - **Infrastructure:** Modal (GPU), Neon (hosted Postgres for the demo)
 - **Datasets:** SWE-bench Lite, LoCoMo (see each dataset's license)
 

@@ -1,0 +1,284 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[letterpaper,margin=0.8in,columnsep=0.28in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit,arrows.meta,backgrounds}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+
+\definecolor{itaragreen}{HTML}{1F9D55}
+\definecolor{itaraviolet}{HTML}{6B52D6}
+\definecolor{itarawash}{HTML}{EEF6F1}
+
+\input{generated/numbers.tex}
+% Tables come from paper/generate.py. TeX's primitive \input is expandable, so a generated row
+% may start with \multicolumn inside a tabular.
+\newcommand{\rows}[1]{\csname @@input\endcsname generated/#1 }
+
+\title{\textbf{Itara: Paying for a Team's Context Once}\\[2pt]
+\large A Self-Hosted Open-Weight Gateway with Shared Memory, Permission-Scoped KV Caching,\\ and Confidence-Gated Escalation to a Closed Model}
+\author{P.~Mutegetsi\\\texttt{pmuteget@caltech.edu}}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Teams that use a closed large language model pay for the same context again and again: every engineer sends the same codebase, documents and decisions with every question. We present \textbf{Itara}, a self-hosted gateway that a whole team shares. An open-weight model (Llama~3.1~8B) answers the questions it is confident about. A team memory, compressed once and isolated per team by row-level security, stands in for raw context. A KV cache, keyed by permission, lets teammates reuse each other's prefill while preventing cross-team timing leaks. A cascade gate built on the open model's own confidence decides when to escalate to the closed model (Muse Spark). Before running any experiment we set a goal: match the closed model's accuracy, within 3 points, while sending it at most 10\% of its tokens. On 300 SWE-bench Lite localisation tasks and 300 LoCoMo questions, \textbf{the goal is not met}: at 10\% of the tokens the gateway reaches \cascadeSwe\% on code against \accSweDirect\% and \cascadeLoco\% on conversations against \accLocoDirect\%. The results nevertheless separate what works from what does not. On code, the closed model given the team's memory summaries reads \inputSweCompact\% of the context and matches its full-context accuracy (\accSweCompact\% vs.\ \accSweDirect\%) at \shareSweCompact\% of the tokens; what remains of the bill is the closed model's own reasoning. The open model's confidence separates its right answers from wrong ones (AUC \aucSwe{} on code, \aucLoco{} on conversations), and the gate beats random escalation by 5 points at the 10\% budget on code. On conversations, retrieval rather than routing is the bottleneck. Shared memory cuts ingest work per engineer by \dropSharedRelated\% at 16 engineers, against \dropAloneRelated\% without sharing. We report post-hoc analyses (larger budgets, lower reasoning effort) separately and with intervals.
+\end{abstract}
+
+\section{Introduction}
+
+A software team that adopts a frontier model through an API pays per token, and most of those tokens are context: the files around an issue, the design notes, the decisions made last month. The same context is sent by every engineer, for every question, and paid for each time. Two developments make a different arrangement possible. Open-weight models are now good enough to answer many routine questions themselves~\citep{llama3}, and serving systems can reuse the attention state of text that has already been processed~\citep{kwon2023vllm,zheng2024sglang,gim2024promptcache,yao2025cacheblend,liu2025lmcache}. A team could therefore process its shared knowledge once, answer what it can locally, and send the closed model only what it must, in compact form.
+
+Each of these ideas has been studied alone: routers and cascades between cheap and expensive models~\citep{chen2023frugalgpt,ding2024hybrid,ong2025routellm,gupta2024cascades}, retrieval and memory for language models~\citep{lewis2020rag,packer2023memgpt}, and KV-cache reuse in serving~\citep{kwon2023vllm,yao2025cacheblend}. They have not, to our knowledge, been combined and measured as one shared service for a team, where the access-control questions that a shared cache raises~\citep{song2024earlybird,gu2025auditing} must be answered as part of the design.
+
+\paragraph{The goal, stated in advance.} Before any experiment we wrote down a pass rule: \emph{for a team sharing one codebase, the gateway matches the accuracy of sending context straight to the closed model, within 3 points, while sending it at most 10\% of the closed model's tokens.} We report the verdict on that rule first, and keep every choice made after seeing results (larger budgets, a lower reasoning effort) separate and labelled.
+
+\paragraph{Contributions.}
+\begin{itemize}
+\item \textbf{A system.} Itara is an OpenAI-compatible gateway (Section~\ref{sec:system}) combining a per-team compressed memory under Postgres row-level security, a KV cache whose keys include the reader's permission scope, a confidence-gated cascade to a closed model, and exact token accounting with a hard spending cap.
+\item \textbf{A pre-registered evaluation} on the real models: all 300 SWE-bench Lite issues~\citep{jimenez2024swebench} as a file-localisation task and 300 LoCoMo questions~\citep{maharana2024locomo}, against six baselines and an oracle router, with out-of-fold gates and paired bootstrap intervals (Section~\ref{sec:setup}).
+\item \textbf{A negative result with a diagnosis.} The 10\% goal is missed on both benchmarks. We show why: with a reasoning model, the closed model's own output, not the context, sets the cost of an escalation; and on conversations, retrieval caps every routing policy (Section~\ref{sec:results}).
+\item \textbf{Positive findings.} Compressed team memory lets the closed model match its full-context accuracy on code with under a tenth of the context. The open model's confidence is a usable escalation signal. Sharing memory across a team reduces per-engineer work as the team grows, and scoping the cache by permission removes the cross-team timing channel by construction.
+\end{itemize}
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Routing and cascades.} FrugalGPT~\citep{chen2023frugalgpt} chains models of increasing cost and stops when a scorer accepts an answer. Hybrid LLM~\citep{ding2024hybrid} and RouteLLM~\citep{ong2025routellm} learn a router that predicts, before generation, whether the small model suffices. \citet{gupta2024cascades} show that sequence-level confidence is length-biased and that token-level quantiles defer better. Itara is a cascade in this sense, but its unit of saving is different: escalations carry compact team memory instead of raw context, and the gate is scored against token budgets measured on the closed model's actual usage, including its reasoning tokens.
+
+\paragraph{Knowing when a model is wrong.} Models' own probabilities carry information about correctness~\citep{kadavath2022know}. Agreement between sampled answers is a strong black-box signal~\citep{wang2023selfconsistency,manakul2023selfcheckgpt,kuhn2023semantic}. Our cascade gate combines token log-probabilities, agreement among four resamples and a yes/no self-check, all computed on the open model's cached prefix.
+
+\paragraph{Memory and context.} Retrieval-augmented generation~\citep{lewis2020rag} and agent memory systems such as MemGPT~\citep{packer2023memgpt} keep knowledge outside the prompt. Long prompts are not only expensive but can hurt accuracy~\citep{liu2024lost,hong2025contextrot}, and prompt compression reduces tokens directly~\citep{jiang2023llmlingua}. Itara's memory is per team rather than per user, is compressed once by the open model, and is retrieved by hybrid vector and keyword search fused by reciprocal rank~\citep{cormack2009rrf}.
+
+\paragraph{KV-cache reuse and its risks.} vLLM's paged attention and prefix caching~\citep{kwon2023vllm}, SGLang's radix tree~\citep{zheng2024sglang}, Prompt Cache~\citep{gim2024promptcache}, CacheBlend~\citep{yao2025cacheblend} and LMCache~\citep{liu2025lmcache} reuse attention state across requests. Shared caches leak: response timing reveals whether another user's prompt was cached~\citep{song2024earlybird}, and audits found cross-user cache sharing at several commercial APIs~\citep{gu2025auditing}. Itara keys the cache by permission scope so that a hit is only possible between readers with the same access.
+
+\section{System}
+\label{sec:system}
+
+\begin{figure}[t]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  font=\scriptsize, node distance=3mm,
+  box/.style={draw=black!35, rounded corners=2pt, fill=white, align=center, inner sep=3pt, minimum height=6mm},
+  arr/.style={-{Stealth[length=1.6mm]}, draw=black!55},
+]
+\node[box, minimum width=7.4cm] (apps) {apps, chat UIs, coding agents \quad(OpenAI-compatible API, key $\to$ team, user)};
+\node[box, below=4mm of apps, minimum width=2.6cm] (llama) {\textbf{Llama 3.1 8B}\\vLLM, open weights};
+\node[box, left=4mm of llama, minimum width=2.1cm] (mem) {\textbf{team memory}\\Postgres + pgvector\\summaries + pages};
+\node[box, right=4mm of llama, minimum width=2.1cm] (kv) {\textbf{KV cache}\\key = $H(\text{scope})$};
+\node[box, below=3mm of llama, minimum width=2.6cm, fill=itarawash] (gate) {\textbf{cascade gate}\\$\hat p(\text{draft right}) \geq \tau$?};
+\node[box, below=4mm of gate, minimum width=7.4cm] (muse) {\textbf{Muse Spark} (closed) \quad receives compact memory, never the cache scope};
+\begin{scope}[on background layer]
+\node[draw=itaragreen, fill=itarawash!40, rounded corners=4pt, fit=(mem)(llama)(kv)(gate), inner sep=6pt, label={[font=\tiny, text=itaragreen!70!black, anchor=south east]south east:Itara (self-hosted)}] {};
+\end{scope}
+\draw[arr] (apps) -- (llama);
+\draw[arr] (mem) -- node[above, font=\tiny]{top-5} (llama);
+\draw[arr, <->] (kv) -- (llama);
+\draw[arr] (llama) -- node[right, font=\tiny]{draft} (gate);
+\draw[arr] (gate) -- node[right, font=\tiny]{unsure: escalate} (muse);
+\draw[arr] (gate.west) -| node[above, pos=0.25, font=\tiny]{sure: keep draft} ([xshift=-6mm]mem.south west) |- (apps.west);
+\end{tikzpicture}}
+\caption{Itara. The open model drafts every answer with the team's memory, reusing the team's cached prefill. The gate keeps confident drafts and escalates the rest to the closed model with compact memory. Row-level security and scope-keyed caching isolate teams.}
+\label{fig:arch}
+\end{figure}
+
+Itara is a single server (Figure~\ref{fig:arch}) that speaks the OpenAI chat-completions API, so any client adopts it by changing a base URL. It runs the open model on vLLM~\citep{kwon2023vllm}, stores memory in Postgres with pgvector~\citep{pgvector}, and reaches the closed model through the Meta Model API~\citep{metamodelapi}.
+
+\paragraph{Identity and isolation.} Each API key maps to one team and one user, and only its hash is stored; identity never comes from client headers. Every memory row carries a team and an optional owner. Postgres row-level security~\citep{postgresrls}, forced even for the table owner, restricts every query to rows of the caller's team that are shared or owned by the caller. Personal memory is private by default; code, documents and decisions are shared with the team.
+
+\paragraph{Shared memory.} A document is split on blank lines into pages of at most 2{,}000 characters. The open model compresses each page into a JSON summary written as one fact per sentence (who did what, when) plus keywords; if it fails twice, the page's opening text is stored instead. Summaries are embedded with BGE-small~\citep{xiao2023cpack}. Raw pages are kept behind their summaries. A question retrieves its top-$k{=}5$ summaries by reciprocal rank fusion~\citep{cormack2009rrf} of a cosine-similarity ranking and a full-text ranking:
+\begin{equation}
+\mathrm{score}(m)=\sum_{r\in\{\text{vec},\text{text}\}} \frac{1}{60+\mathrm{rank}_r(m)},
+\end{equation}
+with ties broken by id so retrieval is deterministic. Code sources are labelled with their commit; conversation sources with their session date, which the compression prompt is told to use when resolving relative times.
+
+\paragraph{Permission-scoped KV cache.} A request to the open model carries a cache salt $s=H(\text{team})$ if all retrieved memory is shared, or $H(\text{team}\,\|\,\text{user})$ if any is private. vLLM mixes the salt into the hash of the first KV block, so prefix hits occur only between requests with the same scope. A teammate asking about the same code reuses the prefill; a member of another team, even with an identical prompt, never hits the cache and cannot learn from its timing~\citep{song2024earlybird}. The closed model receives memory but never the salt.
+
+\paragraph{Routes.} Each question takes one route: \emph{local\_memory} (the open model answers with the top-5 summaries), \emph{escalate\_compact} (the closed model answers with the same summaries), or \emph{escalate\_raw} (the closed model answers with the raw pages behind them). Requests with tool calls pass to the closed model unchanged.
+
+\paragraph{Gates.} A \emph{rule gate} escalates questions longer than 200 tokens or containing a fenced code block. A \emph{per-route gate} fits, for each route, a logistic model of $P(\text{right}\mid x)$ on 18 features of the question, the retrieved memory and the open model's draft, and picks
+\begin{equation}
+\hat r(x)=\arg\max_{r} \; \hat P_r(\text{right}\mid x)-\lambda\,\widehat{\mathrm{cost}}_r(x),
+\end{equation}
+where the cost is estimated in dollars before the call; sweeping $\lambda$ traces a cost--accuracy curve. Training labels come from escalation regret: each route's actual correctness on the item. The \emph{cascade gate}, which Itara ships, is simpler. The open model always drafts first. A single logistic score $\hat p$ of ``the draft is right'' is computed from six confidence features: the mean and minimum token log-probability of the draft, the share of tokens with probability below one half, agreement of four resamples at temperature~1 with the draft (cosine similarity and exact first-line match), and the probability of ``yes'' when the model is asked whether its answer is correct and supported by memory. The resamples and the self-check reuse the draft's cached prefix, so they cost little prefill. If $\hat p<\tau$ the question escalates: with summaries when most retrieved memory is code, with raw pages otherwise.
+
+\paragraph{Accounting and the cap.} Every model call is recorded with the token counts the model reports, tagged with the request it belongs to. Before a paid call, its worst-case cost is reserved under a lock against a hard cap, so concurrent requests cannot exceed it. An admin view shows, per person and team, the routes taken, cached tokens reused and spend (a live topology dashboard and a command-line tool are part of the release).
+
+\section{Experimental setup}
+\label{sec:setup}
+
+\paragraph{Models and infrastructure.} The open model is Llama~3.1~8B Instruct~\citep{llama3} on vLLM with prefix caching on one H100 (Modal). The closed model is Muse Spark~1.2 through the Meta Model API~\citep{metamodelapi}, a reasoning model whose output tokens include its reasoning, at its default effort unless stated. Answers are generated at temperature~0.
+
+\paragraph{Benchmarks.} \emph{Code}: all 300 SWE-bench Lite issues~\citep{jimenez2024swebench}, posed as file localisation, a step used by recent agent pipelines~\citep{xia2024agentless}: name at most five files to change. An item counts as right only if every file in the gold patch is named; no judge is needed. Each repository is a team; its memory is the files of the BM25-retrieved context distributed with the benchmark (about 13K tokens per issue). \emph{Conversations}: 300 questions from LoCoMo~\citep{maharana2024locomo} (categories 1--4, sampled with a fixed seed), each conversation a team and each session a memory source. Answers are judged by the closed model at minimal effort~\citep{zheng2023judge}; a hand check of \handChecked{} randomly sampled verdicts across conditions agreed with the judge on \handAgree.
+
+\paragraph{Conditions.} \emph{Muse, full context} sends the closed model the whole retrieved code (on average \directIn{} prompt tokens) or the whole conversation (\directInLoco); it is the accuracy reference and the token denominator. \emph{Always escalate} (summaries or raw pages), \emph{rule gate}, \emph{Llama + memory} (never escalate), and Itara's \emph{cascade gate} complete the set. The \emph{oracle router} knows every route's correctness and picks the cheapest right route; no gate choosing among these routes can beat it.
+
+\paragraph{Metrics and protocol.} Accuracy is the share of items right. Cost is the closed model's tokens (prompt plus completion) as a share of the reference's on the same items; we also report the prompt-only share. Gates are trained and scored out of fold: five folds grouped by team, so a repository or conversation is never in both training and test. Intervals on the accuracy gap are paired bootstrap 95\% intervals over items (4{,}000 resamples)~\citep{efron1993bootstrap}. The pass rule is applied to point estimates at each benchmark's 10\% operating point.
+
+\paragraph{Team replay.} To measure sharing, SWE-bench tasks on one repository are replayed by $n\in\{1,2,4,8,16\}$ simulated engineers with two tasks each, either as one team (shared memory and cache) or each alone. Tasks are ordered either by overlap with files the team already touched (\emph{related}) or at random. Pages ingested per engineer is the timing-independent measure of the gateway's work.
+
+\section{Results}
+\label{sec:results}
+
+\begin{table*}[t]
+\centering
+\small
+\caption{Main results. Gap: accuracy minus Muse with the full context, in points, with a paired bootstrap 95\% interval. Token share: Muse prompt + completion tokens relative to the reference on the same items; prompt share counts prompt tokens only. Kept: questions answered by the open model. On LoCoMo the rule gate never escalates (the questions are short and contain no code blocks), so it matches Llama + memory.}
+\label{tab:main}
+\begin{tabular}{lrcrrr}
+\toprule
+Condition & Accuracy (\%) & Gap (pts) [95\% CI] & Token share (\%) & Prompt share (\%) & Kept (\%)\\
+\midrule
+\rows{tab_main.tex}
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{generated/fig_accuracy.pdf}
+\caption{Accuracy against the closed model's tokens. Lines sweep each gate's threshold or $\lambda$ (out of fold). Dots are fixed routes; the diamond is the oracle router. The shaded box is the pre-registered pass region: within 3 points of the full-context reference at $\leq$10\% of its tokens.}
+\label{fig:accuracy}
+\end{figure*}
+
+\subsection{The goal is not met}
+Table~\ref{tab:main} and Figure~\ref{fig:accuracy} give the verdict. At 10\% of the closed model's tokens, the cascade gate reaches \cascadeSwe\% on code against \accSweDirect\% (gap \gapSweFull{} points, interval \gapLoSweFull{} to \gapHiSweFull) and \cascadeLoco\% on conversations against \accLocoDirect\%. Both fail the pre-registered rule by a wide margin. The rest of this section explains why, and what does work.
+
+\subsection{On code, compact memory carries the saving}
+Sending every question to the closed model with the top-5 memory summaries scores \accSweCompact\% against \accSweDirect\% (gap \gapSweCompact, interval \gapLoSweCompact{} to \gapHiSweCompact): no measurable loss. The closed model then reads \inputSweCompact\% of the prompt tokens it would otherwise receive (\escInDefault{} instead of \directIn{} per question). Raw pages behind the summaries reach \accSweRaw\% at \inputSweRaw\% of the prompt. Yet the total-token share of the summary route is \shareSweCompact\%, not 9\%: Muse writes about \escOutDefault{} reasoning and answer tokens per escalation however short its prompt. With a reasoning model, compression removes the context cost but leaves the model's own output as the floor.
+
+One caveat qualifies the code numbers. The reference names the right files for \sweUnseenAcc\% of the \sweUnseenN{} issues whose gold file was not in its retrieved context at all; the issue text and the model's knowledge of these well-known repositories carry much of the accuracy. Code localisation is therefore a lenient test of memory, and LoCoMo, where answers exist only in the team's conversations, is the strict one.
+
+\subsection{On conversations, retrieval is the bottleneck}
+On LoCoMo the best route, raw pages for every question, reaches \accLocoRaw\% at \shareLocoRaw\% of the tokens, against \accLocoDirect\%. Splitting items by whether retrieval found a memory from the session that holds the evidence (it did for \locoRetrieved\% of questions) locates the loss. When it did, the closed model with raw pages scores \locoHitRaw\% against the reference's \locoHitDirect\%; summaries alone score \locoHitCompact\%, so compression loses detail that raw pages restore. When retrieval missed, every gateway route scores \locoMissCompact--\locoMissRaw\% while the reference, which reads everything, scores \locoMissDirect\%. The oracle router reaches only \accLocoOracle\%: with this retrieval, no routing policy can pass.
+
+\subsection{The gate: a real signal, a hard budget}
+
+\begin{table}[t]
+\centering
+\small
+\caption{How well each signal separates the open model's right drafts from wrong ones (AUC, out of fold; 0.5 is chance).}
+\label{tab:auc}
+\begin{tabular}{lcc}
+\toprule
+Signal & Code & Conv.\\
+\midrule
+\rows{tab_auc.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{Gates at each benchmark's 10\% budget (out of fold). Random: escalating the same share of tokens at random. The per-route gate uses 18 features; the cascade gate, six confidence features. The last two rows are upper bounds.}
+\label{tab:gate}
+\begin{tabular}{lrrr}
+\toprule
+Gate & Acc. (\%) & Tokens (\%) & Random (\%)\\
+\midrule
+\rows{tab_gate.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+The open model's confidence is informative (Table~\ref{tab:auc}). The strongest single feature is whether four resamples repeat the draft's answer; mean token log-probability and the self-check also carry signal, and all are computed from the open model alone, with no closed-model calls. At the 10\% budget (Table~\ref{tab:gate}) the cascade gate scores \cascadeSwe\% on code against \randomSwe\% for random escalation with the same tokens, and keeps \cascadeKeptSwe\% of questions on the open model. The per-route gate, despite a higher AUC for its draft score, does worse at the budget (\perRouteSwe\%): it fits 18 features for each of three routes on about 480 training items per fold and decides on the difference of two noisy probabilities. On conversations, where only \draftRightLoco\% of drafts are right, a 10\% budget already escalates most questions and ranking matters little.
+
+Two upper bounds show why 10\% is out of reach for any gate that judges only the draft. A perfect draft check, escalating exactly the wrong drafts, would score \perfectSwe\% on code but costs \perfectShareSwe\% of the tokens. The questions a good gate escalates are the expensive ones: the closed model writes \escTokWrongSwe{} tokens on questions the open model got wrong against \escTokRightSwe{} on those it got right. Only the oracle passes on code (\accSweOracle\% at \shareSweOracle\%), because it also knows when the closed model will fail.
+
+\subsection{Larger budgets (chosen after the run)}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{The most accurate option within each budget (any fixed route, either gate's sweep). $^\dagger$Budget chosen after seeing the results. \checkmark: within 3 points of the reference.}
+\label{tab:budget}
+\begin{tabular}{llll}
+\toprule
+Budget & Acc. (gap) & Option & Tokens (\%)\\
+\midrule
+\rows{tab_budget.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+A team may prefer accuracy over the deepest saving. Table~\ref{tab:budget} reports 20\% and 25\% budgets, which we chose only after seeing the results and present as points on the curve, not as a pass. On code, sending every question with summaries matches the reference at \budgetQuarterShare\% of its tokens. Two of the reference's answers reasoned to the closed model's 262{,}144-token output limit and returned nothing; they are \runawayShare\% of its tokens, so we describe this point as about a quarter of the tokens. At that budget most of the saving comes from compact memory, not from answering locally. Conversations stop at \locoCeiling\% whatever the budget.
+
+\subsection{Lower reasoning effort (chosen after the run)}
+
+\begin{table*}[t]
+\centering
+\small
+\caption{Code, with the closed model at minimal reasoning effort (a setting chosen after the results; same memory, drafts and probes). Gaps against the full-context reference at the same effort (83.0\%) and at default effort (86.0\%), with paired bootstrap 95\% intervals. ``Other folds'': each fold's $\lambda$ is chosen on the other folds, removing in-sample selection.}
+\label{tab:effort}
+\begin{tabular}{lrcrcr}
+\toprule
+& & \multicolumn{2}{c}{vs.\ reference, same effort} & \multicolumn{2}{c}{vs.\ reference, default effort}\\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Option & Acc. (\%) & Gap [95\% CI] & Tokens (\%) & Gap [95\% CI] & Tokens (\%)\\
+\midrule
+\rows{tab_effort.tex}
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Because the closed model's output dominates escalation cost, we reran every closed-model condition at its minimal reasoning effort on the same memory and drafts, together with a full-context reference at the same effort (Table~\ref{tab:effort}). Output per escalation falls from \escOutDefault{} to \escOutMinimal{} tokens. On code, the per-route gate then scores \minPerRoute\% against \minDirect\% (gap \minGap, interval \minLo{} to \minHi) at \minShare\% of the tokens, keeping \minKept\% of questions on the open model. Choosing $\lambda$ on other folds gives a similar result, so in-sample selection does not explain it. The point estimate lies inside the pass rule, but the interval admits misses of over 5 points (the gap is at least $-3$ in \minP\% of resamples), the setting was chosen after the run, and the reference itself is weaker than at default effort; against the default-effort reference the same gate misses by 5 points. Notably, sending every question with summaries at minimal effort scores \minCompact\%, a gap of \minCompactGapDefault{} points to the \emph{default-effort} reference, at \minCompactShareDefault\% of its tokens. Conversations do not move (\minLoco\%). We report this as a post-hoc finding and do not count it as meeting the goal.
+
+\subsection{Sharing across a team}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{generated/fig_scaling.pdf}
+\caption{Pages ingested per engineer as the team grows (SWE-bench, one repository, two tasks per engineer).}
+\label{fig:scaling}
+\end{figure}
+
+Figure~\ref{fig:scaling} shows the work per engineer as the team grows. With shared memory, pages ingested per engineer fall by \dropSharedRelated\% at 16 engineers on related tasks, against \dropAloneRelated\% when each works alone; on random tasks the drop is \dropSharedRandom\% against \dropAloneRandom\%. The scoped KV cache behaved as designed on the H100 deployment: with one 6{,}150-token team memory, a teammate's request reused 6{,}144 cached prompt tokens and a request from another team reused none. On an H100 the wall-clock saving for 6K tokens is small (0.43\,s against 0.59\,s, dominated by network round trips); reused tokens are the meaningful measure.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Where the cost goes.} The study began from the premise that context dominates the bill. For a reasoning model that premise holds only until the context is compressed: after that, the closed model's own reasoning is most of each escalation. A 10\% total-token budget then implies escalating only a few questions, and the gate has to be both accurate and selective. Two levers follow: send fewer questions (a better gate), or make each escalation cheaper (lower reasoning effort, which in our post-hoc run moved code close to the bar).
+
+\paragraph{What a gate can and cannot know.} The open model's confidence identifies its own wrong answers reasonably well, but the oracle's advantage comes from knowing when the closed model will also fail, which no draft-only signal provides. Routing work that reports only the cheap model's accuracy, or counts calls rather than tokens, may understate this limit.
+
+\paragraph{Why open weights.} The shared cache requires control of the model's attention state, which closed APIs do not expose, and a cache is only reusable by the model that produced it. The layer that processes a team's repeated reading is therefore an open-weight model by necessity; Llama is what we built and measured on. Other open families would serve as well technically.
+
+\section{Limitations and threats to validity}
+\begin{itemize}
+\item \textbf{Simulated teams.} Teams are repositories and conversations, and the replay simulates engineers; we did not observe real teams.
+\item \textbf{One model pair}, one size of open model, and one closed model; results may differ for others.
+\item \textbf{An LLM judge} scores LoCoMo. The hand check agreed on \handAgree{} of \handChecked{} verdicts, both disagreements being lenient judge calls.
+\item \textbf{Benchmark leniency.} Code localisation on well-known repositories rewards prior knowledge (the reference is often right without seeing the file).
+\item \textbf{Post-hoc choices} (budgets, reasoning effort) are reported separately and with intervals, but they were made after seeing results. Choosing the operating point from a sweep on the same items is a mild selection; our nested check suggests it is small here.
+\item \textbf{Sample size.} With 300 items per benchmark, intervals on gaps are about $\pm$3 points.
+\item \textbf{Cache scope.} We tested scope-keyed prefix caching on one server; cross-server sharing (LMCache) was not evaluated.
+\end{itemize}
+
+\section{Conclusion}
+Itara shares one open-weight model, one compressed memory and one permission-scoped KV cache across a team, and escalates to a closed model only when the open model is unsure. Against a goal set in advance, it falls short: 10\% of the closed model's tokens is not enough to match its accuracy on either benchmark. The measurements say why. On code, compact team memory already lets the closed model match itself with under a tenth of the context, and the remaining cost is the closed model's reasoning; on conversations, retrieval rather than routing limits accuracy. Better retrieval, cheaper escalations and gates that also anticipate the closed model's failures are the next steps. Every escalation pairs the open model's draft with the closed model's answer on the team's own questions, which also makes the gateway a natural source of data for improving the team's open model.
+
+\section*{Reproducibility}
+Code, per-item answers for every real-model run, gate replays and analysis notebooks are in the repository (\texttt{results/}). All tables and figures in this paper are generated from those files by \texttt{paper/generate.py}, which calls no model. Simulated runs used to check the pipeline are excluded from all reported numbers.
+
+\section*{Disclosure and use of AI assistance}
+This work was carried out during the Meta Global AI Developer Hackathon (26 October--4 November 2026). A small amount of code (data models and a compression prompt) was imported from the author's earlier project in one marked commit; everything else was written during the event (see \texttt{DISCLOSURE.md}). AI coding assistants were used for research, planning, code and writing; all design decisions, experiments and results were reviewed by the author. Benchmark data are public (SWE-bench Lite, LoCoMo) and no private or company data was used.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
