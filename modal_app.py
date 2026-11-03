@@ -9,9 +9,13 @@ stands in (see .env.example). To deploy:
     modal deploy modal_app.py
     # then the CLOUD block in .env: LLAMA_BASE_URL=<printed url>/v1, LLAMA_BACKEND=vllm
 
-MODEL, GPU and LMCACHE come from the environment at deploy time (defaults: Llama 3.1 8B
-Instruct on an H100), e.g.
+MODEL, GPU, LMCACHE and MODAL_APP come from the environment at deploy time (defaults: Llama
+3.1 8B Instruct on an H100, app memory-gateway-llama), e.g.
     MODEL=meta-llama/Llama-3.2-3B-Instruct GPU=L4 modal deploy modal_app.py
+A GPU count (GPU=H100:2) splits the model across the GPUs (tensor parallel). A second
+MODAL_APP keeps another deployment up beside the default one, e.g. a 70B model:
+    MODEL=RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic GPU=H100:2 MODAL_APP=itara-llama-70b \
+        modal deploy modal_app.py
 
 One container at most: a second would cost a second GPU and split the prefix cache, so
 requests beyond max_inputs queue instead (keep INGEST_CONCURRENCY at or below 32).
@@ -32,6 +36,8 @@ import modal
 MODEL = os.environ.get("MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 GPU = os.environ.get("GPU", "H100")
 LMCACHE = os.environ.get("LMCACHE", "0") == "1"
+APP = os.environ.get("MODAL_APP", "memory-gateway-llama")
+TENSOR_PARALLEL = int(GPU.split(":")[1]) if ":" in GPU else 1
 MAX_MODEL_LEN = 16384
 
 image = (
@@ -41,10 +47,10 @@ image = (
                  *(["lmcache"] if LMCACHE else []))
     # Containers re-import this file, so pin the deploy-time choices into the image.
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": "/models",
-          "MODEL": MODEL, "LMCACHE": "1" if LMCACHE else "0"})
+          "MODEL": MODEL, "LMCACHE": "1" if LMCACHE else "0", "GPU": GPU, "MODAL_APP": APP})
 )
 weights = modal.Volume.from_name("memory-gateway-weights", create_if_missing=True)
-app = modal.App("memory-gateway-llama", image=image)
+app = modal.App(APP, image=image)
 
 
 @app.function(volumes={"/models": weights}, secrets=[modal.Secret.from_name("hf-token")],
@@ -73,7 +79,7 @@ def snapshot_dir() -> str:
     timeout=3600,
 )
 @modal.concurrent(max_inputs=32)
-@modal.web_server(port=8000, startup_timeout=600)
+@modal.web_server(port=8000, startup_timeout=1200)  # a 70B model takes several minutes to load
 def serve():
     # Served from the volume's directory under the repo's name: Hugging Face is never contacted
     # (the server has no token for the gated repo, and the snapshot deliberately skips
@@ -87,6 +93,8 @@ def serve():
         "--enable-prompt-tokens-details",  # reports cached_tokens in usage
         "--api-key", os.environ["LLAMA_API_KEY"],
     ]
+    if TENSOR_PARALLEL > 1:
+        cmd += ["--tensor-parallel-size", str(TENSOR_PARALLEL)]
     env = dict(os.environ) | {"HF_HUB_OFFLINE": "1"}
     if LMCACHE:
         cmd += ["--kv-transfer-config", '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}']

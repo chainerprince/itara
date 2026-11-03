@@ -114,39 +114,44 @@ async def main(args) -> None:
     price = Ledger(None, 0.0, settings.muse_input_price_per_m, settings.muse_output_price_per_m).cost
     routes = [LOCAL, Route.ESCALATE_COMPACT.value, Route.ESCALATE_RAW.value]
     url = args.database or f"{settings.database_url.rsplit('/', 1)[0]}/gateway_{args.id.replace('-', '_')}_full"
-    run = argparse.Namespace(id=args.id, n=args.n, seed=0, database=url, no_confidence=False)
+    run = argparse.Namespace(id=args.id, n=args.n, seed=0, database=url, no_confidence=False,
+                             muse_id=args.muse_id)
+    muse_run = args.muse_id or args.id  # the memory and the Muse answers came from this run
     rows, refs, _, confident = await load_rows(run, routes, price)
     assert confident, "needs eval/confidence.py's probes"
     cascade_out_of_fold(rows, list(CONFIDENCE_FEATURES))
     saved = json.loads((RESULTS / f"gate_{args.id}.json").read_text())
     rng = np.random.default_rng(SEED)
-    path = RESULTS / f"routellm_bert_{args.id}.jsonl"
+    path = RESULTS / f"routellm_bert_{muse_run}.jsonl"
     scores = ({(s["bench"], s["item"]): s["strong_win_rate"] for s in map(json.loads, path.open())}
               if path.exists() else {})
 
-    report = {"run_id": args.id, "h100_usd_per_s": H100_USD_PER_S,
+    report = {"run_id": args.id, "muse_run_id": muse_run, "gpus": args.gpus, "h100_usd_per_s": H100_USD_PER_S,
               "muse_usd_per_m": [settings.muse_input_price_per_m, settings.muse_output_price_per_m],
               "benchmarks": {}}
     for bench in BENCHES:
         rs = [r for r in rows if r["bench"] == bench]
-        build_s, calls, muse_cached = await ledger_facts(url, args.id, bench)
+        if not rs:
+            continue
+        build_s, calls, muse_cached = await ledger_facts(url, muse_run, bench)
         if bench == "swebench":
             report["team"] = team(build_s, calls)
         draft_s = np.array([r["draft"].seconds for r in rs])
+        gpus = args.gpus  # GPU-seconds = seconds x GPUs serving the open model
 
-        def fixed(baseline: str, *, memory: bool, gpu: bool = False, rs=rs, bench=bench):
+        def fixed(baseline: str, *, memory: bool, gpu: bool = False, rs=rs, bench=bench, gpus=gpus):
             res = [refs[baseline][r["item"]] for r in rs]
             return ([bool(x.score.get(HEADLINE[bench])) for x in res],
                     [price(x.muse_prompt_tokens, x.muse_completion_tokens) for x in res],
-                    [x.seconds if gpu and x.route == LOCAL else 0.0 for x in res],
+                    [x.seconds * gpus if gpu and x.route == LOCAL else 0.0 for x in res],
                     [x.seconds for x in res], [x.route != LOCAL for x in res])
 
-        def composed(picked: list[str], probes: bool, rs=rs, draft_s=draft_s):
+        def composed(picked: list[str], probes: bool, rs=rs, draft_s=draft_s, gpus=gpus):
             chosen = [r["results"][p] for r, p in zip(rs, picked)]
             local = draft_s * (2 if probes else 1)  # draft, and the probes charged the draft's time again
             return ([r["correct"][p] for r, p in zip(rs, picked)],
                     [price(c.muse_prompt_tokens, c.muse_completion_tokens) for c in chosen],
-                    local,
+                    local * gpus,
                     local + np.array([c.seconds if p != LOCAL else 0.0 for c, p in zip(chosen, picked)]),
                     [p != LOCAL for p in picked])
 
@@ -164,8 +169,9 @@ async def main(args) -> None:
                                      memory=True, build_s=build_s, note="retrieval, no compression"))
         out["options"].append(option("Muse + team memory", *fixed("escalate_compact", memory=True),
                                      memory=True, build_s=build_s, note="compression, no routing"))
-        out["options"].append(option("Rule gate", *fixed("rule_gate", memory=True, gpu=True),
-                                     memory=True, build_s=build_s, note="hand-written routing"))
+        if all(r["item"] in refs["rule_gate"] for r in rs):
+            out["options"].append(option("Rule gate", *fixed("rule_gate", memory=True, gpu=True),
+                                         memory=True, build_s=build_s, note="hand-written routing"))
         points = saved["cascade"]["operating_points"]
         picked10 = cascade_choose(rs, points["0.1"][bench]["threshold"])
         n_up = sum(p != LOCAL for p in picked10)
@@ -210,7 +216,7 @@ async def main(args) -> None:
                     f"RouteLLM router, {budget:.0%} budget",
                     [r["correct"][p] for r, p in zip(rs, picked)],
                     [price(c.muse_prompt_tokens, c.muse_completion_tokens) for c in chosen],
-                    draft_s * kept, np.where(kept, draft_s, [c.seconds for c in chosen]), ~kept,
+                    draft_s * kept * gpus, np.where(kept, draft_s, [c.seconds for c in chosen]), ~kept,
                     memory=True, build_s=build_s,
                     note="off the shelf, decides before any draft; threshold chosen on these items"
                          + ("" if budget == 0.1 else "; budget chosen after the run")))
@@ -241,4 +247,6 @@ if __name__ == "__main__":
     parser.add_argument("--id", default="full1", help="the run's id")
     parser.add_argument("-n", type=int, default=300, help="items per benchmark, as in the run")
     parser.add_argument("--database", help="the run's database (default: gateway_<id>_full)")
+    parser.add_argument("--muse-id", help="the run whose Muse answers and memory build to use (e.g. full1)")
+    parser.add_argument("--gpus", type=int, default=1, help="GPUs serving the open model (charged per GPU)")
     asyncio.run(main(parser.parse_args()))

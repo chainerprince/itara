@@ -1,5 +1,7 @@
 {
   "run_id": "full1",
+  "muse_run_id": "full1",
+  "gpus": 1,
   "h100_usd_per_s": 0.001097,
   "muse_usd_per_m": [
     1.25,

@@ -76,6 +76,15 @@ NO_PROBE = {"llama_prompt_tokens": 0, "llama_completion_tokens": 0, "cached_toke
             "compute_tokens": 0}
 
 
+MUSE_ONLY = ("muse_direct", "escalate_compact", "escalate_raw")  # no Llama in their answers
+
+
+def run_for(args, baseline: str) -> str:
+    """The run whose answers to use: --muse-id's for Muse-only baselines, if given. A run with a
+    different open model then reuses the Muse answers it would have got, on the same memory."""
+    return (getattr(args, "muse_id", None) or args.id) if baseline in MUSE_ONLY else args.id
+
+
 def run_results(run_id: str, bench: str, baseline: str) -> dict[str, Result]:
     log = RunLog(f"{bench}_{baseline}", f"{run_id}-{bench}-{baseline}")
     return {r.item_id: r for r in log.results()}
@@ -256,7 +265,7 @@ async def load_rows(args, routes: list[str], price) -> tuple[list[dict], dict, i
         for bench in BENCHES:
             items = (swebench_loc.load(args.n, args.seed) if bench == "swebench"
                      else locomo.load(args.n, args.seed))
-            results = {b: run_results(args.id, bench, b) for b in set(REFERENCES) | {"llama_only"}}
+            results = {b: run_results(run_for(args, b), bench, b) for b in set(REFERENCES) | {"llama_only"}}
             for b in REFERENCES:
                 refs[b].update(results[b])
             for item in items:
@@ -311,10 +320,13 @@ def write_full_baseline(args, bench: str, rows: list[dict], picked: list[str], g
         log.append(result)
         results.append(result)
     # Labels from a run that called Muse, so Muse's settings (its reasoning effort) carry over.
-    labels_path = RESULTS / f"{bench}_escalate_compact_{args.id}-{bench}-escalate_compact.json"
+    muse = run_for(args, "escalate_compact")
+    labels_path = RESULTS / f"{bench}_escalate_compact_{muse}-{bench}-escalate_compact.json"
     labels = {k: v for k, v in json.loads(labels_path.read_text()).items()
               if k in ("llama_model", "muse_model", "muse_is_standin", "muse_reasoning_effort",
                        "simulated", "ingest_concurrency", "answer_temperature")}
+    drafts = RESULTS / f"{bench}_llama_only_{args.id}-{bench}-llama_only.json"
+    labels["llama_model"] = json.loads(drafts.read_text())["llama_model"]  # the drafts' model
     log.write_summary({"bench": bench, "baseline": "full", "seed": args.seed, **labels,
                        "offline_replay": True, **gate, **summarise(results, HEADLINE[bench])})
 
@@ -323,7 +335,7 @@ async def main(args) -> None:
     settings = Settings()
     price = Ledger(None, 0.0, settings.muse_input_price_per_m, settings.muse_output_price_per_m).cost
     routes = [Route.LOCAL_MEMORY.value, Route.ESCALATE_COMPACT.value]
-    if all(run_results(args.id, b, "escalate_raw") for b in BENCHES):
+    if all(run_results(run_for(args, "escalate_raw"), b, "escalate_raw") for b in BENCHES):
         routes.append(Route.ESCALATE_RAW.value)
     rows, refs, mismatched, confident = await load_rows(args, routes, price)
     if not rows:
@@ -453,6 +465,8 @@ if __name__ == "__main__":
     parser.add_argument("-n", type=int, default=300)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--database", help="default: gateway_<id>_full on DATABASE_URL's server")
+    parser.add_argument("--muse-id", help="take the Muse-only baselines from this run (e.g. full1), "
+                                          "for a run that only changed the open model")
     parser.add_argument("--budget", type=float, default=0.10,
                         help="Muse tokens allowed, as a share of muse_direct's")
     parser.add_argument("--margin", type=float, default=0.03,
