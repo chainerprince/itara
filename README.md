@@ -15,7 +15,7 @@ Itara speaks the OpenAI API, so any app, chat UI or coding agent uses it by chan
 
 > For a team sharing one codebase, Itara matches the accuracy of sending context straight to the closed model, while sending it **≤ 10% of the tokens**. It knows when not to escalate, and the shared cache makes each extra teammate cheaper.
 
-We set this goal before running anything, and **we haven't met it yet** (see the results below). It is still the goal Itara is built toward.
+We set this goal before running anything, and **we haven't met it yet** (see the results below). It is still the goal Itara is built toward, and future versions aim straight at it. The results so far are promising: see [the path to the north star](#the-path-to-the-north-star).
 
 ## How it works
 
@@ -63,6 +63,17 @@ Measured on the real models: Llama 3.1 8B on vLLM (a Modal H100) and Muse Spark 
 
 **Sharing pays off as the team grows.** In replays of 1 to 16 engineers on one repo, the gateway's ingest work per engineer falls **35%** with shared memory at 16 engineers, against 13% without sharing (related tasks; on random tasks, 7% vs 1%). A teammate's request reused **6,144** cached prompt tokens; someone on another team reused **0**.
 
+## The path to the north star
+
+These runs used an 8B open model on one GPU over nine days. The numbers suggest the goal is within reach with a bigger open model, more GPUs and more time:
+
+- **The goal is reachable in principle.** An oracle router, which knows each answer in advance, scores 90.3% on code at 8.8% of Muse's tokens: inside the target.
+- **The open model is the limit.** Llama 8B's draft is right on only 56% of issues. Even a perfect check that escalated exactly its wrong drafts would use 12.1% of the tokens, just over the target. If a bigger open model (70B-class) got 70% right, the same check would use about 8%. That is a rough estimate, but it lands inside the target. Bigger models in the same family score much higher, and they judge their own answers better, which is the signal the gate relies on.
+- **The gate needs more data.** It learned from about 480 questions at a time. A deployed Itara collects questions as a matter of course.
+- **Cheaper escalations already help.** At Muse's minimal reasoning effort, Itara came within about 2 points on code at 10% of the tokens (chosen after the run, and the interval allows misses of up to 5 points).
+
+A 70B open model needs at least two H100s, which was beyond this project's budget. It is the first experiment on the roadmap. For conversations, a bigger model isn't enough: retrieval has to improve first. These are expectations to test, not results.
+
 ## Install
 
 Itara installs from GitHub for now (PyPI is on the roadmap).
@@ -72,7 +83,7 @@ Itara installs from GitHub for now (PyPI is on the roadmap).
 - **a closed model to escalate to:** Muse Spark through the Meta Model API, or a larger local model standing in.
 
 ```bash
-git clone https://github.com/chainerprince/memory-gateway.git itara && cd itara
+git clone https://github.com/chainerprince/itara.git itara && cd itara
 uv sync                         # installs the `itara` command
 cp .env.example .env            # point LLAMA_* and MUSE_* at your models (see the comments)
 uv run itara up                 # Postgres + pgvector in Docker, the schema, the gateway on :8000
@@ -143,6 +154,7 @@ Everything measured is in [`results/`](results/): the analysis notebooks, and ev
 
 ## Roadmap
 
+- **Reach the north star.** Rerun the evaluation with a 70B-class open model on more GPUs, train the gate on more questions, and improve retrieval for conversations.
 - **`pip install itara`.** Publish to PyPI, with the dashboard and schema shipped inside the package.
 - **A one-command self-host.** A Docker Compose file that runs the gateway alongside Postgres.
 - **Better retrieval for conversations.** It is what limits LoCoMo.
