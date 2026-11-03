@@ -1,0 +1,32 @@
+{
+  "run_id": "full1-swebench-llama_only",
+  "bench": "swebench",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 300,
+  "accuracy": 0.5566666666666666,
+  "mean_ceiling": 0.33,
+  "mean_recall": 0.5566666666666666,
+  "in_context_rate": 0.33,
+  "gold_in_hits_rate": 0.33666666666666667,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 307423,
+  "cached_tokens": 27232,
+  "compute_tokens": 308388,
+  "llama_seconds": 430.23,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 300
+  }
+}

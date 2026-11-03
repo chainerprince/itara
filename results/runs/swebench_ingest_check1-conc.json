@@ -1,0 +1,18 @@
+{
+  "run_id": "check1-conc",
+  "bench": "swebench",
+  "phase": "ingest",
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 100,
+  "ingest_seconds": 14700.3,
+  "ingest_wall_seconds": 290.9,
+  "ingest_pages": 2271,
+  "pages_per_second": 7.806,
+  "ingest_fallback_rate": 0.00044033465433729633
+}

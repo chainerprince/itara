@@ -1,0 +1,32 @@
+{
+  "run_id": "full1-swebench-muse_direct",
+  "bench": "swebench",
+  "baseline": "muse_direct",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 300,
+  "accuracy": 0.86,
+  "mean_ceiling": 0.33,
+  "mean_recall": 0.86,
+  "in_context_rate": 0.33,
+  "gold_in_hits_rate": null,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 3375896,
+  "muse_completion_tokens": 1624894,
+  "llama_prompt_tokens": 0,
+  "cached_tokens": 0,
+  "compute_tokens": 0,
+  "llama_seconds": 0,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "muse_direct": 300
+  }
+}

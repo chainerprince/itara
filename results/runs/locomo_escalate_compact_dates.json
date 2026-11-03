@@ -1,0 +1,30 @@
+{
+  "run_id": "dates",
+  "bench": "locomo",
+  "baseline": "escalate_compact",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 100,
+  "accuracy": 0.35,
+  "in_context_rate": 1.0,
+  "gold_in_hits_rate": 0.0,
+  "source_in_hits_rate": 0.6,
+  "muse_prompt_tokens": 44118,
+  "muse_completion_tokens": 103132,
+  "llama_prompt_tokens": 0,
+  "cached_tokens": 0,
+  "compute_tokens": 0,
+  "llama_seconds": 0,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "escalate_compact": 100
+  }
+}

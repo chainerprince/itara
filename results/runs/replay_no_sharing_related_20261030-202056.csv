@@ -1,0 +1,6 @@
+team_size,baseline,order,tasks,accuracy,muse_tokens_per_user,compute_tokens_per_user,ingest_pages_per_user,llama_seconds_per_user,ingest_seconds_per_user,cached_ratio,llama_model,muse_model,muse_is_standin,simulated,ingest_concurrency,answer_temperature,replayed_calls
+1,no_sharing,related,2,1.0,8618.0,0.0,67.0,0.0,31.043968585086986,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+2,no_sharing,related,4,0.75,8370.5,0.0,60.0,0.0,29.405727959354408,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+4,no_sharing,related,8,1.0,7314.0,0.0,59.5,0.0,31.103676771046594,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+8,no_sharing,related,16,0.8125,7146.375,0.0,58.25,0.0,34.845435113529675,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+16,no_sharing,related,32,0.84375,23319.875,213.3125,58.4375,0.28439076562062837,68.17204235692043,0.014755610205963726,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0

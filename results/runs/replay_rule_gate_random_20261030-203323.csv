@@ -1,0 +1,6 @@
+team_size,baseline,order,tasks,accuracy,muse_tokens_per_user,compute_tokens_per_user,ingest_pages_per_user,llama_seconds_per_user,ingest_seconds_per_user,cached_ratio,llama_model,muse_model,muse_is_standin,simulated,ingest_concurrency,answer_temperature,replayed_calls
+1,rule_gate,random,2,0.5,1831.0,649.0,56.0,0.4466339577920735,101.34743658197112,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+2,rule_gate,random,4,0.75,2852.5,314.5,57.0,0.2103150625480339,23.640257707447745,0.0,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+4,rule_gate,random,8,0.75,1357.25,752.25,56.75,0.9565743124694563,25.952724812785164,0.07874015748031496,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+8,rule_gate,random,16,0.625,4810.625,596.625,53.0,0.7310553958523087,34.73937800049316,0.09969849246231156,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0
+16,rule_gate,random,32,0.84375,5022.8125,448.9375,51.875,0.5910204686952056,55.26872413238743,0.09253530598520511,meta-llama/Llama-3.1-8B-Instruct,muse-spark-1.2,False,False,16,0.0,0

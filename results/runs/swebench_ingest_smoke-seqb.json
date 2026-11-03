@@ -1,0 +1,17 @@
+{
+  "run_id": "smoke-seqb",
+  "bench": "swebench",
+  "phase": "ingest",
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "replayed_calls": 0,
+  "items": 5,
+  "ingest_seconds": 198.5,
+  "ingest_wall_seconds": 198.6,
+  "ingest_pages": 132,
+  "pages_per_second": 0.665,
+  "ingest_fallback_rate": 0.007575757575757576
+}

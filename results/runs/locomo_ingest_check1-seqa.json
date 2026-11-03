@@ -1,0 +1,18 @@
+{
+  "run_id": "check1-seqa",
+  "bench": "locomo",
+  "phase": "ingest",
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 100,
+  "ingest_seconds": 779.9,
+  "ingest_wall_seconds": 783.6,
+  "ingest_pages": 556,
+  "pages_per_second": 0.71,
+  "ingest_fallback_rate": 0.0
+}

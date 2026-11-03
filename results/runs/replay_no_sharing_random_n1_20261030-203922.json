@@ -1,0 +1,32 @@
+{
+  "run_id": "20261030-203922",
+  "team_size": 1,
+  "order": "random",
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 2,
+  "accuracy": 0.5,
+  "mean_ceiling": 0.5,
+  "mean_recall": 0.5,
+  "in_context_rate": 0.5,
+  "gold_in_hits_rate": 0.5,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 834,
+  "muse_completion_tokens": 2209,
+  "llama_prompt_tokens": 644,
+  "cached_tokens": 0,
+  "compute_tokens": 660,
+  "llama_seconds": 0.51,
+  "ingest_seconds": 24.09,
+  "ingest_pages": 56,
+  "ingest_fallback_rate": 0.0,
+  "routes": {
+    "escalate_compact": 1,
+    "local_memory": 1
+  }
+}

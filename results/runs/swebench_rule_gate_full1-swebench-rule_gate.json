@@ -1,0 +1,33 @@
+{
+  "run_id": "full1-swebench-rule_gate",
+  "bench": "swebench",
+  "baseline": "rule_gate",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 300,
+  "accuracy": 0.8266666666666667,
+  "mean_ceiling": 0.33,
+  "mean_recall": 0.8266666666666667,
+  "in_context_rate": 0.33,
+  "gold_in_hits_rate": 0.33666666666666667,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 269642,
+  "muse_completion_tokens": 779396,
+  "llama_prompt_tokens": 32968,
+  "cached_tokens": 32496,
+  "compute_tokens": 2372,
+  "llama_seconds": 61.05,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "escalate_compact": 249,
+    "local_memory": 51
+  }
+}

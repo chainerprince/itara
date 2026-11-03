@@ -1,0 +1,30 @@
+{
+  "run_id": "full1-locomo-llama_only",
+  "bench": "locomo",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 300,
+  "accuracy": 0.38333333333333336,
+  "in_context_rate": 0.9933333333333333,
+  "gold_in_hits_rate": 0.0,
+  "source_in_hits_rate": 0.6375838926174496,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 150426,
+  "cached_tokens": 39872,
+  "compute_tokens": 113246,
+  "llama_seconds": 116.1,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 300
+  }
+}

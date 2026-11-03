@@ -1,0 +1,28 @@
+{
+  "run_id": "smoke-conc",
+  "bench": "locomo",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "replayed_calls": 0,
+  "items": 5,
+  "accuracy": 0.0,
+  "in_context_rate": 1.0,
+  "gold_in_hits_rate": 0.0,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 1955,
+  "cached_tokens": 240,
+  "compute_tokens": 1766,
+  "llama_seconds": 2.26,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 5
+  }
+}

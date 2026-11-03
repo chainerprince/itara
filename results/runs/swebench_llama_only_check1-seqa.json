@@ -1,0 +1,32 @@
+{
+  "run_id": "check1-seqa",
+  "bench": "swebench",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "answer_temperature": 0.0,
+  "replayed_calls": 0,
+  "items": 100,
+  "accuracy": 0.57,
+  "mean_ceiling": 0.39,
+  "mean_recall": 0.57,
+  "in_context_rate": 0.39,
+  "gold_in_hits_rate": 0.34,
+  "source_in_hits_rate": null,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 101773,
+  "cached_tokens": 4944,
+  "compute_tokens": 100999,
+  "llama_seconds": 100.71,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 100
+  }
+}

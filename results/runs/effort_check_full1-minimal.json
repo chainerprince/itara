@@ -1,0 +1,275 @@
+{
+  "run_id": "full1-minimal",
+  "reference_run_id": "full1",
+  "resamples": 4000,
+  "budget": 0.1,
+  "margin": 0.03,
+  "benchmarks": {
+    "swebench": {
+      "items": 300,
+      "options": {
+        "per-route gate, lambda chosen on these items": {
+          "accuracy": 0.8066666666666666,
+          "kept_on_llama": 0.13333333333333333,
+          "same_effort": {
+            "reference_accuracy": 0.83,
+            "gap": -0.023333333333333317,
+            "gap_interval": [
+              -0.053333333333333344,
+              0.006666666666666601
+            ],
+            "share": 0.09811741011220042,
+            "share_interval": [
+              0.09181714970466887,
+              0.10490329590208786
+            ],
+            "p_within_margin": 0.666
+          },
+          "default_effort": {
+            "reference_accuracy": 0.86,
+            "gap": -0.053333333333333344,
+            "gap_interval": [
+              -0.08666666666666667,
+              -0.023333333333333317
+            ],
+            "share": 0.06788067485337317,
+            "share_interval": [
+              0.05760272892314651,
+              0.07807430680771972
+            ],
+            "p_within_margin": 0.0695
+          }
+        },
+        "per-route gate, lambda chosen on other folds": {
+          "accuracy": 0.81,
+          "kept_on_llama": 0.13333333333333333,
+          "same_effort": {
+            "reference_accuracy": 0.83,
+            "gap": -0.019999999999999907,
+            "gap_interval": [
+              -0.04999999999999993,
+              0.00666666666666671
+            ],
+            "share": 0.09870850148365379,
+            "share_interval": [
+              0.09224011342073557,
+              0.10565778899346373
+            ],
+            "p_within_margin": 0.7445
+          },
+          "default_effort": {
+            "reference_accuracy": 0.86,
+            "gap": -0.04999999999999993,
+            "gap_interval": [
+              -0.08333333333333337,
+              -0.020000000000000018
+            ],
+            "share": 0.06828961024158182,
+            "share_interval": [
+              0.05791663405250147,
+              0.07872821369606721
+            ],
+            "p_within_margin": 0.102
+          }
+        },
+        "cascade gate (shipped), threshold chosen on these items": {
+          "accuracy": 0.7966666666666666,
+          "kept_on_llama": 0.14666666666666667,
+          "same_effort": {
+            "reference_accuracy": 0.83,
+            "gap": -0.033333333333333326,
+            "gap_interval": [
+              -0.06666666666666665,
+              -0.0033333333333332993
+            ],
+            "share": 0.0996013529488956,
+            "share_interval": [
+              0.09204985665823677,
+              0.10817275722695116
+            ],
+            "p_within_margin": 0.4095
+          },
+          "default_effort": {
+            "reference_accuracy": 0.86,
+            "gap": -0.06333333333333335,
+            "gap_interval": [
+              -0.09666666666666668,
+              -0.030000000000000027
+            ],
+            "share": 0.06890731264460215,
+            "share_interval": [
+              0.05812565200596238,
+              0.0801129101209128
+            ],
+            "p_within_margin": 0.0235
+          }
+        },
+        "every question to Muse + summaries": {
+          "accuracy": 0.8333333333333334,
+          "kept_on_llama": 0.0,
+          "same_effort": {
+            "reference_accuracy": 0.83,
+            "gap": 0.0033333333333334103,
+            "gap_interval": [
+              -0.020000000000000018,
+              0.026666666666666616
+            ],
+            "share": 0.1162652159058786,
+            "share_interval": [
+              0.1098983598693615,
+              0.12351620010727642
+            ],
+            "p_within_margin": 0.99625
+          },
+          "default_effort": {
+            "reference_accuracy": 0.86,
+            "gap": -0.026666666666666616,
+            "gap_interval": [
+              -0.053333333333333344,
+              0.0
+            ],
+            "share": 0.08043589112920159,
+            "share_interval": [
+              0.06837692585616731,
+              0.09247084593204764
+            ],
+            "p_within_margin": 0.57175
+          }
+        }
+      }
+    },
+    "locomo": {
+      "items": 300,
+      "options": {
+        "per-route gate, lambda chosen on these items": {
+          "accuracy": 0.5733333333333334,
+          "kept_on_llama": 0.19,
+          "same_effort": {
+            "reference_accuracy": 0.8533333333333334,
+            "gap": -0.28,
+            "gap_interval": [
+              -0.33999999999999997,
+              -0.22333333333333338
+            ],
+            "share": 0.09664806253514516,
+            "share_interval": [
+              0.09047030438683877,
+              0.10280326188227132
+            ],
+            "p_within_margin": 0.0
+          },
+          "default_effort": {
+            "reference_accuracy": 0.87,
+            "gap": -0.29666666666666663,
+            "gap_interval": [
+              -0.3566666666666666,
+              -0.24
+            ],
+            "share": 0.09282818075033226,
+            "share_interval": [
+              0.08695516062547513,
+              0.09868892201628617
+            ],
+            "p_within_margin": 0.0
+          }
+        },
+        "per-route gate, lambda chosen on other folds": {
+          "accuracy": 0.5733333333333334,
+          "kept_on_llama": 0.18333333333333332,
+          "same_effort": {
+            "reference_accuracy": 0.8533333333333334,
+            "gap": -0.28,
+            "gap_interval": [
+              -0.33999999999999997,
+              -0.22333333333333338
+            ],
+            "share": 0.09867755522118438,
+            "share_interval": [
+              0.09277369249854128,
+              0.10480886112749953
+            ],
+            "p_within_margin": 0.0
+          },
+          "default_effort": {
+            "reference_accuracy": 0.87,
+            "gap": -0.29666666666666663,
+            "gap_interval": [
+              -0.3566666666666667,
+              -0.24
+            ],
+            "share": 0.0947774605284201,
+            "share_interval": [
+              0.08912857259327821,
+              0.10061059620702735
+            ],
+            "p_within_margin": 0.0
+          }
+        },
+        "cascade gate (shipped), threshold chosen on these items": {
+          "accuracy": 0.5733333333333334,
+          "kept_on_llama": 0.24333333333333335,
+          "same_effort": {
+            "reference_accuracy": 0.8533333333333334,
+            "gap": -0.28,
+            "gap_interval": [
+              -0.33666666666666667,
+              -0.22000000000000008
+            ],
+            "share": 0.09497401366583688,
+            "share_interval": [
+              0.08878488681057936,
+              0.10134251574127104
+            ],
+            "p_within_margin": 0.0
+          },
+          "default_effort": {
+            "reference_accuracy": 0.87,
+            "gap": -0.29666666666666663,
+            "gap_interval": [
+              -0.3566666666666667,
+              -0.24
+            ],
+            "share": 0.09122029636083889,
+            "share_interval": [
+              0.08534309598135492,
+              0.09728366619579111
+            ],
+            "p_within_margin": 0.0
+          }
+        },
+        "every question to Muse + summaries": {
+          "accuracy": 0.44333333333333336,
+          "kept_on_llama": 0.0,
+          "same_effort": {
+            "reference_accuracy": 0.8533333333333334,
+            "gap": -0.41000000000000003,
+            "gap_interval": [
+              -0.47333333333333333,
+              -0.34666666666666673
+            ],
+            "share": 0.040473047095498295,
+            "share_interval": [
+              0.03934263942795534,
+              0.04165034075161356
+            ],
+            "p_within_margin": 0.0
+          },
+          "default_effort": {
+            "reference_accuracy": 0.87,
+            "gap": -0.42666666666666664,
+            "gap_interval": [
+              -0.49,
+              -0.36666666666666664
+            ],
+            "share": 0.038873405557730806,
+            "share_interval": [
+              0.03780897556442724,
+              0.0399721195467412
+            ],
+            "p_within_margin": 0.0
+          }
+        }
+      }
+    }
+  }
+}

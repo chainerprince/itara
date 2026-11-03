@@ -1,0 +1,30 @@
+{
+  "run_id": "smoke-seqa",
+  "bench": "swebench",
+  "baseline": "llama_only",
+  "seed": 0,
+  "llama_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 1,
+  "replayed_calls": 0,
+  "items": 5,
+  "accuracy": 0.6,
+  "mean_ceiling": 0.2,
+  "mean_recall": 0.6,
+  "in_context_rate": 0.2,
+  "gold_in_hits_rate": 0.2,
+  "muse_prompt_tokens": 0,
+  "muse_completion_tokens": 0,
+  "llama_prompt_tokens": 4359,
+  "cached_tokens": 64,
+  "compute_tokens": 4497,
+  "llama_seconds": 3.78,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 5
+  }
+}
