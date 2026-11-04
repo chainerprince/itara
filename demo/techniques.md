@@ -6,7 +6,7 @@
 - **Llama 3.1 8B on vLLM on Modal** (H100). Weights live in a Modal Volume and the GPU scales to zero after 5 idle minutes. **Muse Spark 1.2** is reached through the Meta Model API, with a reasoning-effort setting.
 
 ## Shared memory
-- **Two-level memory.** Llama compresses each page into a summary plus keywords; the compression logic is from ai-os. The raw page is kept behind its summary. Escalations send either the **compact** summaries or the **raw** pages.
+- **Two-level memory.** Llama compresses each page into a summary plus keywords; the compression prompt started from a draft in ai-os. The raw page is kept behind its summary. Escalations send either the **compact** summaries or the **raw** pages.
 - **Compression prompt:** JSON output, one fact per sentence (who, what, when), session dates in the source labels. If the JSON is unusable twice, it falls back to the raw page start.
 - **Hybrid retrieval:** pgvector cosine search (bge-small embeddings) and Postgres full-text search, merged with **reciprocal rank fusion**. Ties break on id, so results are deterministic.
 - **Row-level security** (`FORCE ROW LEVEL SECURITY`, `SET LOCAL ROLE`). Each team reads only its own memory, and personal memory is private by default.

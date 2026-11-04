@@ -143,4 +143,6 @@ Before building Itara we set a north star: **match the closed model's accuracy w
 
 ## Credits
 
-Itara was built for the Meta Global AI Developer Hackathon (26 Oct – 4 Nov 2026), adapted from Prince Mutegetsi's [ai-os](https://github.com/chainerprince/ai-os) project, by Prince Mutegetsi with Claude Opus 5.5. [`DISCLOSURE.md`](DISCLOSURE.md) separates the code reused from ai-os from the code written during the event.
+Itara was built by Prince Mutegetsi, with Claude Opus 5.5, during the Meta Global AI Developer Hackathon (26 Oct – 4 Nov 2026; Indie Developer track, Push the Frontier). The only earlier code it uses is about 20 lines of a compression prompt from Prince's [ai-os](https://github.com/chainerprince/ai-os); [`DISCLOSURE.md`](DISCLOSURE.md) lists what was built during the event.
+
+Built with Llama.

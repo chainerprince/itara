@@ -3,6 +3,7 @@ name = "itara"
 version = "0.1.0"
 description = "One open-weight model, one memory and one KV cache for a whole team; the closed model only when needed"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
