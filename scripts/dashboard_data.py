@@ -12,8 +12,9 @@ numbers as results/full_run.ipynb.
   sweep (the notebook's "Larger budgets" rule). 10% is the north star; 20% and 25% were
   chosen after the run.
 - Team scaling: the latest real (not simulated, not stand-in) replay per baseline and order.
-- Open models: the same code questions with Llama 3.3 70B drafting instead of 8B (run big1,
-  added after the run; same memory, same Muse answers), with paired bootstrap intervals.
+- Open models: the same questions with another open model drafting instead of the 8B (OPEN_MODELS,
+  all added after the run; same memory, same Muse answers), each against the 8B with paired
+  bootstrap intervals.
 """
 
 from __future__ import annotations
@@ -32,6 +33,13 @@ OUT = ROOT / "dashboard" / "public" / "results.json"  # the app reads it; the ga
 BENCHES = ("swebench", "locomo")
 FIXED = ("llama_only", "rule_gate", "escalate_compact", "escalate_raw")
 BUDGETS = (0.10, 0.20, 0.25)
+# The open model that drafted in each run. full1 is the full run; each other run repeats only
+# its open-model steps, on a copy of full1's memory and with full1's Muse answers
+# (scripts/open_model_run.sh), so it compares with full1 item by item. big1 drafted code only.
+OPEN_MODELS = {"full1": "Llama 3.1 8B", "big1": "Llama 3.3 70B", "glim1": "Muse Glimmer 30B"}
+# Where the cascade sends an escalation: code with summaries, conversations with raw pages.
+ESCALATION = {"swebench": "escalate_compact", "locomo": "escalate_raw"}
+FAST_MODE = "Itara cascade, 10% budget"  # its name in eval/cost_compare.py's report
 # scripts/cache_check.py on the H100 deployment, 29 Oct (results/bringup.ipynb, section 1):
 # one 6,150-token team memory asked by three people.
 KV_CACHE = [
@@ -98,55 +106,81 @@ def scaling() -> dict:
     return out
 
 
-def raw(run_id: str, baseline: str) -> dict[str, dict]:
-    path = RESULTS / "raw" / f"swebench_{baseline}_{run_id}-swebench-{baseline}.jsonl"
+def raw(run_id: str, bench: str, baseline: str) -> dict[str, dict]:
+    path = RESULTS / "raw" / f"{bench}_{baseline}_{run_id}-{bench}-{baseline}.jsonl"
     return {r["item_id"]: r for r in map(json.loads, path.open())}
 
 
-def hits(run_id: str, baseline: str) -> dict[str, bool]:
-    return {i: bool(r["score"]["hit"]) for i, r in raw(run_id, baseline).items()}
+def right(run_id: str, bench: str, baseline: str) -> dict[str, bool]:
+    key = "hit" if bench == "swebench" else "correct"
+    return {i: bool(r["score"][key]) for i, r in raw(run_id, bench, baseline).items()}
 
 
-def perfect_check(base: str, run_id: str) -> dict:
-    """Escalate exactly the drafts that are wrong (to Muse with summaries): the best any gate
+def perfect_check(base: str, run_id: str, bench: str) -> dict:
+    """Escalate exactly the drafts that are wrong (by the cascade's route): the best any gate
     that judges only the draft could do, and what it would cost."""
-    draft, compact, direct = hits(run_id, "llama_only"), raw(base, "escalate_compact"), raw(base, "muse_direct")
+    draft = right(run_id, bench, "llama_only")
+    escalated, direct = raw(base, bench, ESCALATION[bench]), raw(base, bench, "muse_direct")
+    key = "hit" if bench == "swebench" else "correct"
     tokens = lambda r: r["muse_prompt_tokens"] + r["muse_completion_tokens"]  # noqa: E731
     wrong = [i for i in draft if not draft[i]]
     return {"wrong_drafts": len(wrong) / len(draft),
-            "accuracy": sum(draft[i] or bool(compact[i]["score"]["hit"]) for i in draft) / len(draft),
-            "share": round(sum(tokens(compact[i]) for i in wrong) / sum(tokens(direct[i]) for i in draft), 5)}
+            "accuracy": sum(draft[i] or bool(escalated[i]["score"][key]) for i in draft) / len(draft),
+            "share": round(sum(tokens(escalated[i]) for i in wrong) / sum(tokens(direct[i]) for i in draft), 5)}
 
 
-def open_models(base: str, big: str, resamples: int = 4000, seed: int = 0) -> dict | None:
-    """Code (SWE-bench) with each open model drafting: alone, and in the cascade at 10% and 20%
-    of Muse's tokens. Paired bootstrap of the 70B's gain over the 8B on the same items."""
-    if not (RESULTS / f"gate_{big}.json").exists():
-        return None
-    direct = hits(base, "muse_direct")
+def gains(base: str, run_id: str, bench: str, resamples: int = 4000, seed: int = 0) -> dict:
+    """run_id's accuracy minus base's on the same items, alone and in the cascade at 10%, with
+    paired bootstrap intervals (a generator per pair, so adding a model changes no other's)."""
     rng = np.random.default_rng(seed)
-    out = {"muse_direct": sum(direct.values()) / len(direct), "models": [], "gain": {}}
-    for run_id in (base, big):
-        gate = json.loads((RESULTS / f"gate_{run_id}.json").read_text())
-        model = json.loads((RESULTS / f"swebench_llama_only_{run_id}-swebench-llama_only.json").read_text())
-        points = gate["cascade"]["operating_points"]
-        out["models"].append({
-            "run_id": run_id, "model": model["llama_model"],
-            "alone": gate["references"]["swebench"]["llama_only"]["accuracy"],
-            "cascade": {b: {"accuracy": points[b]["swebench"]["accuracy"],
-                            "share": round(points[b]["swebench"]["muse_token_share"], 5),
-                            "kept": points[b]["swebench"]["routes"].get("local_memory", 0.0)}
-                        for b in ("0.1", "0.2")},
-            "perfect_check": perfect_check(base, run_id)})
+    out = {}
     for name, baseline in (("alone", "llama_only"), ("cascade_10", "full")):
-        a, b = hits(base, baseline), hits(big, baseline)
+        a, b = right(base, bench, baseline), right(run_id, bench, baseline)
         ids = sorted(set(a) & set(b))
         x, y = (np.array([d[i] for i in ids], float) for d in (a, b))
         idx = rng.integers(0, len(ids), (resamples, len(ids)))
         diff = y[idx].mean(axis=1) - x[idx].mean(axis=1)
-        out["gain"][name] = {"points": float(y.mean() - x.mean()),
-                             "interval": [float(np.percentile(diff, 2.5)), float(np.percentile(diff, 97.5))],
-                             "p_better": float((diff > 0).mean())}
+        out[name] = {"points": float(y.mean() - x.mean()),
+                     "interval": [float(np.percentile(diff, 2.5)), float(np.percentile(diff, 97.5))],
+                     "p_better": float((diff > 0).mean())}
+    return out
+
+
+def open_models(base: str) -> dict:
+    """For each benchmark, every open model that drafted it: alone, and in the cascade at 10%
+    and 20% of Muse's tokens, with its gain over base's model on the same items."""
+    out = {}
+    for bench in BENCHES:
+        models = []
+        for run_id, label in OPEN_MODELS.items():
+            path = RESULTS / f"gate_{run_id}.json"
+            if not path.exists():
+                continue
+            gate = json.loads(path.read_text())
+            if bench not in gate["references"]:
+                continue
+            refs, points = gate["references"][bench], gate["cascade"]["operating_points"]
+            cost = json.loads((RESULTS / f"cost_compare_{run_id}.json").read_text())
+            fast = next(o for o in cost["benchmarks"][bench]["options"] if o["name"] == FAST_MODE)
+            drafts = json.loads((RESULTS / f"{bench}_llama_only_{run_id}-{bench}-llama_only.json").read_text())
+            model = {"run_id": run_id, "label": label, "gpus": cost["gpus"],
+                     "reasoning": drafts.get("llama_reasoning_strength", ""),  # "": doesn't reason
+                     # Muse and GPU dollars per 1,000 questions, and the median wait (eval/cost_compare.py)
+                     "fast_mode": {"usd_per_1k": round(fast["usd_per_1k"], 2),
+                                   "seconds_median": round(fast["seconds_median"], 1)},
+                     "alone": refs["llama_only"]["accuracy"],
+                     "cascade": {b: {"accuracy": points[b][bench]["accuracy"],
+                                     "share": round(points[b][bench]["muse_token_share"], 5),
+                                     "kept": points[b][bench]["routes"].get("local_memory", 0.0)}
+                                 for b in ("0.1", "0.2")},
+                     "auc": round(gate["cascade"]["auc"][bench], 3),
+                     "perfect_check": perfect_check(base, run_id, bench)}
+            if run_id != base:
+                model["gain"] = gains(base, run_id, bench)
+            models.append(model)
+        if len(models) > 1:
+            muse = json.loads((RESULTS / f"gate_{base}.json").read_text())["references"][bench]
+            out[bench] = {"muse_direct": muse["muse_direct"]["accuracy"], "models": models}
     return out
 
 
@@ -166,7 +200,7 @@ def main(args) -> None:
         efforts[effort] = {"run_id": run_id, "after_run": effort != "default",
                            "benchmarks": {b: benchmark(gate, b) for b in BENCHES}}
     data = {"run_id": args.id, "items_per_benchmark": 300, "efforts": efforts, "scaling": scaling(), "kv_cache": KV_CACHE,
-            "handcheck": handcheck(args.id), "open_models": open_models(args.id, args.big)}
+            "handcheck": handcheck(args.id), "open_models": open_models(args.id)}
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     print(f"wrote {OUT.relative_to(ROOT)} ({OUT.stat().st_size // 1024} KB)")
     for effort, e in efforts.items():
@@ -180,5 +214,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--id", default="full1", help="the full run's id")
-    parser.add_argument("--big", default="big1", help="the run with a larger open model drafting")
     main(parser.parse_args())

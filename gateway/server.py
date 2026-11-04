@@ -69,7 +69,7 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         ledger=Ledger(pool, settings.spend_cap_usd,
                       settings.muse_input_price_per_m, settings.muse_output_price_per_m),
         llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
-                         cache_path=settings.model_cache),
+                         cache_path=settings.model_cache, defaults=settings.llama_defaults()),
         muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model,
                         cache_path=settings.model_cache,
                         defaults=({"reasoning_effort": settings.muse_reasoning_effort}

@@ -69,7 +69,8 @@ async def memory_about(store: MemoryStore, scope: Scope, path: str, commit: str 
 
 async def main(args) -> None:
     settings = Settings()
-    llama = ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model)
+    llama = ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
+                       defaults=settings.llama_defaults())
     url = args.database or f"{settings.database_url.rsplit('/', 1)[0]}/gateway_{args.id.replace('-', '_')}_full"
     limit = asyncio.Semaphore(args.concurrency)
     items = swebench_loc.load(args.n, args.seed)

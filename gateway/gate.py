@@ -92,6 +92,11 @@ SAMPLE_TEMPERATURE = 1.0
 # it: resamples stop at SAMPLE_MAX_TOKENS, and the self-check sees the draft's start only.
 SAMPLE_MAX_TOKENS = 512
 CHECK_DRAFT_CHARS = 4000
+# An open model that reasons (Muse Glimmer) writes a reasoning channel before its answer. vLLM's
+# reasoning parser moves it to message.reasoning, but the logprobs still cover both, so the
+# features read the answer's tokens only, and the probes get room to reason first.
+REASONING_MAX_TOKENS = 4096
+SPECIAL_TOKEN = re.compile(r"<\|[^|]*\|>")
 SELF_CHECK = ("Is your answer above correct and supported by the team memory? "
               "Reply with only yes or no.")
 UNSURE = re.compile(r"\b(no (information|mention|record|details?)|not (mentioned|specified|provided|"
@@ -135,17 +140,45 @@ def gate_features(question: str, hits: list[Memory], draft: str, vectors: list[n
     }
 
 
+def reasoning_of(response: dict) -> str:
+    """The reasoning before the answer, for a model that reasons; "" otherwise."""
+    message = (response.get("choices") or [{}])[0].get("message") or {}
+    return message.get("reasoning") or message.get("reasoning_content") or ""
+
+
+def answer_logprobs(response: dict) -> list[dict]:
+    """The answer's logprob entries: all of them, or after reasoning, the last ones, which
+    spell the message's content."""
+    choice = (response.get("choices") or [{}])[0]
+    entries = (choice.get("logprobs") or {}).get("content") or []
+    if not reasoning_of(response):
+        return entries
+    length = len(((choice.get("message") or {}).get("content") or "").strip())
+    if not length:
+        return []
+    entries = [t for t in entries if SPECIAL_TOKEN.sub("", t["token"])]
+    text = ""
+    for i in range(len(entries) - 1, -1, -1):
+        text = SPECIAL_TOKEN.sub("", entries[i]["token"]) + text
+        if len(text.strip()) >= length:
+            return entries[i:]
+    return entries
+
+
 def token_logprobs(response: dict) -> list[float]:
-    """The chosen tokens' log-probabilities, if the response carries them."""
-    logprobs = (response.get("choices") or [{}])[0].get("logprobs") or {}
-    return [t["logprob"] for t in logprobs.get("content") or [] if t.get("logprob") is not None]
+    """The chosen tokens' log-probabilities in the answer, if the response carries them."""
+    return [t["logprob"] for t in answer_logprobs(response) if t.get("logprob") is not None]
 
 
 def yes_probability(response: dict) -> float:
-    """P(yes) / (P(yes) + P(no)) from the first token's top logprobs; 0.5 if neither shows."""
-    content = ((response.get("choices") or [{}])[0].get("logprobs") or {}).get("content") or []
+    """P(yes) / (P(yes) + P(no)) from the answer's first token's top logprobs (after reasoning,
+    its first yes or no); 0.5 if neither shows."""
+    content = answer_logprobs(response)
     if not content:
         return 0.5
+    if reasoning_of(response):
+        content = [next((t for t in content if t["token"].strip().lower() in ("yes", "no")),
+                        content[0])]
     top = content[0].get("top_logprobs") or [content[0]]
     p = {"yes": 0.0, "no": 0.0}
     for t in top:
@@ -168,10 +201,16 @@ async def draft_confidence(chat: Callable[[dict], Awaitable[dict]],
     a yes/no self-check run on the same prefix, so the KV cache serves most of their prompt."""
     draft = draft_response["choices"][0]["message"].get("content") or ""
     base = {k: v for k, v in body.items() if k not in ("logprobs", "top_logprobs", "n")}
+    if reasoning_of(draft_response):
+        written = (draft_response.get("usage") or {}).get("completion_tokens", 0)
+        sample_max = min(REASONING_MAX_TOKENS, max(SAMPLE_MAX_TOKENS, 2 * written))
+        check_max = REASONING_MAX_TOKENS
+    else:
+        sample_max = min(SAMPLE_MAX_TOKENS, max(64, 2 * estimate_tokens(draft)))
+        check_max = 1
     samples, check = await asyncio.gather(
-        chat({**base, "n": SAMPLES, "temperature": SAMPLE_TEMPERATURE,
-              "max_tokens": min(SAMPLE_MAX_TOKENS, max(64, 2 * estimate_tokens(draft)))}),
-        chat({**base, "temperature": 0, "max_tokens": 1, "logprobs": True, "top_logprobs": 10,
+        chat({**base, "n": SAMPLES, "temperature": SAMPLE_TEMPERATURE, "max_tokens": sample_max}),
+        chat({**base, "temperature": 0, "max_tokens": check_max, "logprobs": True, "top_logprobs": 10,
               "messages": [*base["messages"],
                            {"role": "assistant", "content": draft[:CHECK_DRAFT_CHARS]},
                            {"role": "user", "content": SELF_CHECK}]}))

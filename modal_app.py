@@ -16,6 +16,9 @@ A GPU count (GPU=H100:2) splits the model across the GPUs (tensor parallel). A s
 MODAL_APP keeps another deployment up beside the default one, e.g. a 70B model:
     MODEL=RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic GPU=H100:2 MODAL_APP=itara-llama-70b \
         modal deploy modal_app.py
+or Muse Glimmer 30B (bf16, ~60 GB) on one H100, with LLAMA_REASONING_STRENGTH=low in .env:
+    MODEL=meta-models/Muse-Glimmer-30B MODAL_APP=itara-glimmer modal run modal_app.py::download
+    MODEL=meta-models/Muse-Glimmer-30B MODAL_APP=itara-glimmer modal deploy modal_app.py
 
 One container at most: a second would cost a second GPU and split the prefix cache, so
 requests beyond max_inputs queue instead (keep INGEST_CONCURRENCY at or below 32).
@@ -39,16 +42,28 @@ LMCACHE = os.environ.get("LMCACHE", "0") == "1"
 APP = os.environ.get("MODAL_APP", "memory-gateway-llama")
 TENSOR_PARALLEL = int(GPU.split(":")[1]) if ":" in GPU else 1
 MAX_MODEL_LEN = 16384
+# Muse Glimmer (Meta's open 30B, Apache 2.0) reasons before it answers. It needs Meta's vLLM
+# build (CUDA 13.0, which Modal's driver supports) and its reasoning parser, which moves the
+# reasoning out of the answer into message.reasoning. Text only: the vision encoder is skipped.
+GLIMMER = MODEL.startswith("meta-models/Muse-Glimmer")
 
-image = (
-    modal.Image.debian_slim(python_version="3.12")
-    # vLLM 0.11 doesn't cap transformers, and transformers 5 removed tokenizer methods it calls.
-    .pip_install("vllm==0.11.0", "transformers>=4.56,<5", "huggingface_hub[hf_transfer]",
-                 *(["lmcache"] if LMCACHE else []))
-    # Containers re-import this file, so pin the deploy-time choices into the image.
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": "/models",
-          "MODEL": MODEL, "LMCACHE": "1" if LMCACHE else "0", "GPU": GPU, "MODAL_APP": APP})
-)
+if GLIMMER:
+    image = (
+        modal.Image.from_registry("vllm/vllm-openai:muse-glimmer")
+        .entrypoint([])  # the image starts `vllm serve`; Modal runs serve() below instead
+        .run_commands('ln -sf "$(command -v python3)" /usr/local/bin/python')
+        .pip_install("hf_transfer")
+    )
+else:
+    image = (
+        modal.Image.debian_slim(python_version="3.12")
+        # vLLM 0.11 doesn't cap transformers, and transformers 5 removed tokenizer methods it calls.
+        .pip_install("vllm==0.11.0", "transformers>=4.56,<5", "huggingface_hub[hf_transfer]",
+                     *(["lmcache"] if LMCACHE else []))
+    )
+# Containers re-import this file, so pin the deploy-time choices into the image.
+image = image.env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": "/models", "MODEL": MODEL,
+                   "LMCACHE": "1" if LMCACHE else "0", "GPU": GPU, "MODAL_APP": APP})
 weights = modal.Volume.from_name("memory-gateway-weights", create_if_missing=True)
 app = modal.App(APP, image=image)
 
@@ -95,6 +110,9 @@ def serve():
     ]
     if TENSOR_PARALLEL > 1:
         cmd += ["--tensor-parallel-size", str(TENSOR_PARALLEL)]
+    if GLIMMER:
+        cmd += ["--reasoning-parser", "muse_glimmer",
+                "--limit-mm-per-prompt", '{"image": 0, "video": 0}']
     env = dict(os.environ) | {"HF_HUB_OFFLINE": "1"}
     if LMCACHE:
         cmd += ["--kv-transfer-config", '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}']

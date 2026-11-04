@@ -12,15 +12,17 @@ Measured on all 300 SWE-bench Lite issues, with the closed model's tokens and th
 | `itara up` (accurate) | **$16.11** (−57%) | **86.3%** | 9.8 s |
 | `itara up --mode fast` | **$11.87** (−68%) | 74.0% | **2.3 s** |
 
-**A bigger open model makes it better.** With Llama 3.3 70B drafting instead of the 8B (same questions, same memory, same Muse answers; tested after the run):
+**A stronger open model makes it better.** With Llama 3.3 70B or Muse Glimmer 30B, Meta's open reasoning model, drafting instead of the 8B (same questions, same memory, same Muse answers; tested after the run):
 
-| Code accuracy | Llama 3.1 8B | Llama 3.3 70B |
-|---|---|---|
-| Llama alone, with team memory | 55.7% | **67.0%** (+11.3 points, 95% interval +6.7 to +16.0) |
-| Fast mode, 10% of Muse's tokens | 74.0% | **77.7%** (+3.7, interval −0.7 to +8.0) |
-| 20% of Muse's tokens | 82.7% | **85.7%**: within 0.3 points of Muse with the full context |
+| Code | Llama 3.1 8B | Llama 3.3 70B | Muse Glimmer 30B |
+|---|---|---|---|
+| The open model alone, with team memory | 55.7% | 67.0% (+11.3 points, 95% interval +6.7 to +16.0) | **76.0%** (+20.3, interval +14.7 to +26.0) |
+| Fast mode, 10% of Muse's tokens | 74.0% | 77.7% (+3.7, interval −0.7 to +8.0) | **80.3%** at 6.8% of the tokens (+6.3, interval +1.7 to +11.0) |
+| 20% of Muse's tokens | 82.7% | **85.7%** | 84.3% |
+| Fast mode: spend per 1,000 questions, median wait | **$11.87, 2.3 s** | $13.23, 2.6 s | $21.39, 13.2 s |
+| GPUs | one H100 | two H100s (FP8) | one H100 |
 
-The 70B runs on two H100s, so it costs more GPU time per question. A simpler gate that adds a second opinion (does the 8B name the same file?) takes the 70B's fast mode to 81.0% at 10%. That gate was designed after the run, so it's the next step rather than a result ([paper](paper/itara.pdf), `eval/simple_gate.py`).
+Glimmer is the best drafter we measured, but it reasons before it answers: its drafts take 6.1 s at the median against 1.0 s for the 8B, so its fast mode is more accurate, not cheaper or faster. On conversations it adds nothing on its own (38.7% against 38.3%): retrieval is the limit there. A simpler gate that adds a second opinion (does the 8B name the same file?) takes the 70B's fast mode to 81.0% at 10%. That gate was designed after the run, so it's the next step rather than a result ([paper](paper/itara.pdf), `eval/simple_gate.py`).
 
 Itara is a self-hosted gateway that speaks the OpenAI API: any app, chat UI or coding agent uses it by changing its base URL.
 
@@ -95,7 +97,7 @@ reply = client.chat.completions.create(
 
 Each response says where it went in its `X-Gateway-Route` header: `local_memory` (Llama), `escalate_compact` or `escalate_raw` (Muse with summaries or raw pages), or `passthrough` (requests with tool calls go to Muse unchanged).
 
-To draft with Llama 3.3 70B, deploy it with `MODEL=RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic GPU=H100:2 MODAL_APP=itara-llama-70b modal deploy modal_app.py`, point `LLAMA_*` at it, and start `itara up --gate results/runs/gate_big1_model.json`.
+To draft with Llama 3.3 70B, deploy it with `MODEL=RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic GPU=H100:2 MODAL_APP=itara-llama-70b modal deploy modal_app.py`, point `LLAMA_*` at it, and start `itara up --gate results/runs/gate_big1_model.json`. For Muse Glimmer 30B: `MODEL=meta-models/Muse-Glimmer-30B MODAL_APP=itara-glimmer modal deploy modal_app.py` (after `modal run modal_app.py::download` with the same variables), `LLAMA_REASONING_STRENGTH=low` in `.env`, and `itara up --gate results/runs/gate_glim1_model.json`. `scripts/open_model_check.py` checks a new open model's endpoint before a run.
 
 Fast mode uses the cascade trained on the full run (`results/runs/gate_full1_model.json`) at its 10% operating point on code. `GATE_THRESHOLD` moves it between cheaper (lower) and more accurate (higher). `--gate <file>` loads another gate at its own saved threshold.
 
@@ -113,7 +115,7 @@ npm run build    # rebuilds dashboard/dist, which the gateway serves
 
 ## The research behind it
 
-Before building Itara we set a north star: **match the closed model's accuracy while sending it at most 10% of its tokens.** We haven't reached it yet. At 10%, Itara gets 74% on code against 86%. The measurements point to the way there: a router that knew every answer in advance would pass (90.3% at 8.8%), and the open model is the main limit. Swapping the 8B for a 70B already moves fast mode from 74.0% to 77.7%. Most of the results above come from measuring that goal. The goal, every result, the comparisons and their limits are in the paper:
+Before building Itara we set a north star: **match the closed model's accuracy while sending it at most 10% of its tokens.** We haven't reached it yet. At 10%, Itara gets 74% on code against 86%. The measurements point to the way there: a router that knew every answer in advance would pass (90.3% at 8.8%), and the open model is the main limit. Swapping the 8B for a stronger open model already moves fast mode from 74.0% to 77.7% (Llama 3.3 70B) and 80.3% (Muse Glimmer 30B). Most of the results above come from measuring that goal. The goal, every result, the comparisons and their limits are in the paper:
 
 - **[`paper/itara.pdf`](paper/itara.pdf):** the system, the evaluation on SWE-bench Lite and LoCoMo, the gate, costs, team scaling, and what we chose after seeing results.
 - **[`results/`](results/):** every real run's per-item answers, and the notebooks that analyse them. Nothing there calls a model.
@@ -126,6 +128,7 @@ Before building Itara we set a north star: **match the closed model's accuracy w
 | Full run: every condition, both benchmarks | `scripts/full_run.sh` | Yes (Modal + Muse) |
 | Llama's confidence probes and the gates | `scripts/gate_run.sh` | Llama only |
 | Muse at minimal reasoning effort | `scripts/effort_run.sh` | Yes (Muse) |
+| Another open model drafting (runs `big1`, `glim1`) | `RUN_ID=glim1 scripts/open_model_run.sh` (settings in its header) | The open model; Muse only to judge LoCoMo |
 | Intervals for the minimal-effort result | `uv run python -m eval.effort_check` | No |
 | Cost per question, and the comparison with simpler options | `uv run python -m eval.cost_compare` | No |
 | RouteLLM's router scores | `eval/routellm_scores.py` (see its docstring) | Its router, on the CPU |
@@ -134,7 +137,7 @@ Before building Itara we set a north star: **match the closed model's accuracy w
 
 ## Roadmap
 
-- **Reach the north star.** A 70B open model already moves fast mode from 74.0% to 77.7% at 10%. Next: train the gate on more questions, try larger open models, and improve retrieval for conversations.
+- **Reach the north star.** Stronger open models already move fast mode from 74.0% to 77.7% (Llama 3.3 70B) and 80.3% (Muse Glimmer 30B) at 10%, and a perfect judge of either's drafts would pass. Next: a better judge of the drafts, the gate trained on more questions, and better retrieval for conversations.
 - **`pip install itara`.** Publish to PyPI, with the dashboard and schema shipped inside the package.
 - **A one-command self-host.** A Docker Compose file that runs the gateway alongside Postgres.
 - **Better retrieval for conversations.** It is what limits LoCoMo.

@@ -45,7 +45,9 @@ All of this is explained, with intervals, in the notebook and the paper.
 
 **Run ids:**
 - `full1`: the full run. `full1-minimal`: the same with Muse at minimal effort, chosen after the run.
-- `big1`: code only, with Llama 3.3 70B (FP8, 2×H100) drafting instead of 8B, on a copy of full1's memory, added after the run. Its gate files take Muse's answers from `full1` (`eval/learn_gate.py --muse-id full1`).
+- Other open models, each drafting instead of the 8B on a copy of full1's memory (database `gateway_<run id>_full`) and taking Muse's answers from `full1` (`eval/learn_gate.py --muse-id full1`), all added after the run. Only the open model differs from `full1`, so each compares with it item by item; `scripts/open_model_run.sh` makes such a run.
+  - `big1`: Llama 3.3 70B (FP8, 2×H100), code only.
+  - `glim1`: Muse Glimmer 30B (bf16, 1×H100, reasoning strength low), code and conversations. Muse is called only to judge its LoCoMo answers, as in `full1`.
 - `check1-*`, `smoke-*`: the ingest checks.
 - `dates`, `facts`: the memory fixes.
 

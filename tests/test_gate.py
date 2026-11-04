@@ -7,8 +7,8 @@ import pytest
 from eval.learn_gate import (auc, cascade_choose, cascade_point, fit_logistic, folds,
                               operating_point, train_cascade)
 from gateway.accounting import Ledger
-from gateway.gate import (CHECK_DRAFT_CHARS, CONFIDENCE_FEATURES, FEATURES, SAMPLE_MAX_TOKENS,
-                          SAMPLES, CascadeGate, LearnedGate, Route, draft_confidence,
+from gateway.gate import (CHECK_DRAFT_CHARS, CONFIDENCE_FEATURES, FEATURES, REASONING_MAX_TOKENS,
+                          SAMPLE_MAX_TOKENS, SAMPLES, CascadeGate, LearnedGate, Route, draft_confidence,
                           escalation_route, estimated_prompt_tokens, gate_features, load_gate,
                           token_logprobs, yes_probability)
 from memory.store import Memory
@@ -115,6 +115,44 @@ async def test_a_runaway_draft_keeps_the_probes_within_context():
     samples, check = sorted(calls, key=lambda b: "n" not in b)
     assert samples["max_tokens"] == SAMPLE_MAX_TOKENS
     assert len(check["messages"][1]["content"]) == CHECK_DRAFT_CHARS
+
+
+def reasoned(text, reasoning, logprobs, completion_tokens=0):
+    """A reasoning model's response: vLLM's logprobs cover the reasoning channel too."""
+    r = response(text, logprobs)
+    r["choices"][0]["message"]["reasoning"] = reasoning
+    r["usage"] = {"completion_tokens": completion_tokens}
+    return r
+
+
+def test_after_reasoning_only_the_answer_is_read():
+    tokens = [{"token": "The", "logprob": -3.0}, {"token": " file", "logprob": -2.0},
+              {"token": "<|eom|>", "logprob": 0.0}, {"token": "a.py", "logprob": -0.1},
+              {"token": "\nb.py", "logprob": -0.5}, {"token": "<|eot|>", "logprob": 0.0}]
+    assert token_logprobs(reasoned("a.py\nb.py", "The file", tokens)) == [-0.1, -0.5]
+    assert token_logprobs(reasoned("", "The file", tokens)) == []
+    yes = {"token": "Yes", "logprob": math.log(0.8), "top_logprobs": [
+        {"token": "Yes", "logprob": math.log(0.8)}, {"token": "No", "logprob": math.log(0.2)}]}
+    check = reasoned("**Yes**", "It names the file",
+                     [{"token": "It", "logprob": -1.0, "top_logprobs": []},
+                      {"token": "**", "logprob": -0.1}, yes, {"token": "**", "logprob": -0.1}])
+    assert yes_probability(check) == pytest.approx(0.8)
+
+
+async def test_a_reasoning_draft_gives_its_probes_room_to_reason():
+    calls = []
+
+    async def chat(body):
+        calls.append(body)
+        return response("x")
+
+    async def embed(texts):
+        return [np.array([1.0, 0.0]) for _ in texts]
+
+    body = {"messages": [{"role": "user", "content": "Which file?"}]}
+    await draft_confidence(chat, embed, body, reasoned("a.py", "Let me think", [], 900))
+    samples, check = sorted(calls, key=lambda b: "n" not in b)
+    assert samples["max_tokens"] == 1800 and check["max_tokens"] == REASONING_MAX_TOKENS
 
 
 def test_prompt_estimates_per_route():

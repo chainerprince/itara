@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AccuracyChart } from "../components/AccuracyChart";
 import { ScalingChart } from "../components/ScalingChart";
-import { useResults } from "../lib/api";
+import { type OpenModel, useResults } from "../lib/api";
 import { fmt, pct, points } from "../lib/format";
 
 const BENCHES = {
@@ -22,55 +22,80 @@ const OPTION: Record<string, string> = {
   escalate_raw: "every question to Muse, with raw pages", llama_only: "Llama only", rule_gate: "rule gate",
 };
 
-const MODEL_LABEL: Record<string, string> = {
-  "meta-llama/Llama-3.1-8B-Instruct": "Llama 3.1 8B",
-  "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic": "Llama 3.3 70B",
-};
+type OpenModelsData = NonNullable<ReturnType<typeof useResults>>["open_models"];
 
-function OpenModels({ data }: { data: NonNullable<ReturnType<typeof useResults>>["open_models"] & object }) {
-  const [small, big] = data.models;
-  const gain = (g: { points: number; interval: [number, number] }) =>
-    `${points(g.points)} pts (95% interval ${points(g.interval[0])} to ${points(g.interval[1])})`;
-  const rows: [string, (m: typeof small) => number][] = [
-    ["Llama alone, with team memory", (m) => m.alone],
-    ["Itara fast mode, 10% of Muse tokens", (m) => m.cascade["0.1"].accuracy],
-    ["Itara, 20% of Muse tokens", (m) => m.cascade["0.2"].accuracy],
+function OpenModels({ data }: { data: OpenModelsData }) {
+  const benches = (Object.keys(BENCHES) as (keyof typeof BENCHES)[]).filter((k) => data[k]);
+  const [bench, setBench] = useState(benches[0]);
+  const view = data[bench];
+  if (!view) return null;
+  type Row = { label: string; value?: (m: OpenModel) => number; text?: (m: OpenModel) => string; gain?: keyof NonNullable<OpenModel["gain"]>; detail?: (m: OpenModel) => string };
+  const rows: Row[] = [
+    { label: "On its own, with team memory", value: (m) => m.alone, gain: "alone" },
+    { label: "Itara fast mode, 10% of Muse tokens", value: (m) => m.cascade["0.1"].accuracy, gain: "cascade_10" },
+    { label: "Itara, 20% of Muse tokens", value: (m) => m.cascade["0.2"].accuracy },
+    { label: "A perfect judge of its drafts", value: (m) => m.perfect_check.accuracy, detail: (m) => `at ${pct(m.perfect_check.share)} of tokens` },
+    { label: "Fast mode: Muse and GPU per 1,000 questions", text: (m) => `$${m.fast_mode.usd_per_1k.toFixed(2)}`, detail: (m) => `median wait ${m.fast_mode.seconds_median} s` },
   ];
+  const setup = (m: OpenModel) =>
+    [`${m.gpus} H100${m.gpus > 1 ? "s" : ""}`, m.reasoning && `reasons at ${m.reasoning}`].filter(Boolean).join(", ");
   return (
     <section className="section">
       <div className="section-head">
         <div>
-          <h2>A bigger open model</h2>
-          <p className="quiet" style={{ marginTop: 2 }}>The same 300 code questions, the same memory and the same Muse answers; only the model that drafts changes.</p>
+          <h2>Other open models</h2>
+          <p className="quiet" style={{ marginTop: 2 }}>
+            The same questions, the same team memory and the same Muse answers; only the model that drafts changes. Tested after the run.
+          </p>
         </div>
-      </div>
-      <div className="two">
-        <table className="budgets">
-          <thead><tr><th>Code accuracy</th><th>{MODEL_LABEL[small.model] ?? small.model}</th><th>{MODEL_LABEL[big.model] ?? big.model}</th></tr></thead>
-          <tbody>
-            {rows.map(([label, value]) => (
-              <tr key={label}>
-                <td>{label}</td>
-                <td className="acc">{pct(value(small))}</td>
-                <td><span className={`acc${value(big) >= data.muse_direct - 0.03 ? " ok" : ""}`}>{pct(value(big))}</span></td>
-              </tr>
+        {benches.length > 1 && (
+          <div className="seg" role="group" aria-label="Benchmark">
+            {benches.map((k) => (
+              <button key={k} aria-pressed={k === bench} onClick={() => setBench(k)}>{BENCHES[k].label}</button>
             ))}
-            <tr><td className="muted">Muse with the full context</td><td className="muted" colSpan={2}>{pct(data.muse_direct)}</td></tr>
-          </tbody>
-        </table>
-        <div className="facts" style={{ gridTemplateColumns: "1fr", gap: 24 }}>
-          <div className="fact">
-            <div className="value">{points(data.gain.alone.points)} pts</div>
-            <p>for the 70B on its own (95% interval {points(data.gain.alone.interval[0])} to {points(data.gain.alone.interval[1])}).</p>
           </div>
-          <div className="fact">
-            <p>
-              In fast mode {gain(data.gain.cascade_10)}. At 20% of Muse's tokens it comes within {(100 * Math.abs(big.cascade["0.2"].accuracy - data.muse_direct)).toFixed(1)} pts of Muse.
-              Added after the run; 70B in FP8 on two H100s. The 10% north star isn't reached yet.
-            </p>
-          </div>
-        </div>
+        )}
       </div>
+      <table className="budgets">
+        <thead>
+          <tr>
+            <th>{BENCHES[bench].label} accuracy</th>
+            {view.models.map((m) => (
+              <th key={m.run_id}>{m.label}<div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>{setup(m)}</div></th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td>{row.label}</td>
+              {view.models.map((m) => {
+                const g = row.gain && m.gain?.[row.gain];
+                return (
+                  <td key={m.run_id}>
+                    {row.value && <span className={`acc${row.value(m) >= view.muse_direct - 0.03 ? " ok" : ""}`}>{pct(row.value(m))}</span>}
+                    {row.text && <span className="acc">{row.text(m)}</span>}
+                    {g && (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {points(g.points)} pts vs 8B ({points(g.interval[0])} to {points(g.interval[1])})
+                      </div>
+                    )}
+                    {row.detail && <div className="muted" style={{ fontSize: 12 }}>{row.detail(m)}</div>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+          <tr>
+            <td className="muted">Muse with the full context</td>
+            <td className="muted" colSpan={view.models.length}>{pct(view.muse_direct)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="note">
+        Gains are against Llama 3.1 8B on the same items, with 95% paired bootstrap intervals. A perfect judge escalates exactly the wrong drafts:
+        the best any gate that reads only the draft could do. The 10% north star isn't reached yet.
+      </p>
     </section>
   );
 }
@@ -143,7 +168,7 @@ export function Results() {
         </div>
       </section>
 
-      {results.open_models && <OpenModels data={results.open_models} />}
+      {Object.keys(results.open_models).length > 0 && <OpenModels data={results.open_models} />}
 
       <section className="section">
         <div className="section-head"><h2>Sharing across a team</h2></div>

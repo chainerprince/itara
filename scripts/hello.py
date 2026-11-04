@@ -35,7 +35,8 @@ async def check(name: str, client: ChatClient) -> None:
 
 async def main() -> None:
     s = Settings()
-    await check("Llama", ChatClient(s.llama_base_url, s.llama_api_key, s.llama_model))
+    await check("Llama", ChatClient(s.llama_base_url, s.llama_api_key, s.llama_model,
+                                    defaults=s.llama_defaults()))
     label = "Muse (local stand-in)" if s.muse_is_standin else "Muse"
     await check(label, ChatClient(s.muse_base_url, s.muse_api_key, s.muse_model))
 

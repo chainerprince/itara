@@ -61,7 +61,8 @@ def usage_of(responses: list[dict]) -> dict[str, int]:
 
 async def main(args) -> None:
     settings = Settings()
-    llama = ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model)
+    llama = ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
+                       defaults=settings.llama_defaults())
     url = args.database or f"{settings.database_url.rsplit('/', 1)[0]}/gateway_{args.id.replace('-', '_')}_full"
     limit = asyncio.Semaphore(args.concurrency)
     async with AsyncConnectionPool(url, configure=register_vector_async) as pool:

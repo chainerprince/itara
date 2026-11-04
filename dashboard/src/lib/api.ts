@@ -76,12 +76,22 @@ export type Results = {
   scaling: Record<"related" | "random", Record<"shared" | "no_sharing", ScalingRow[]>>;
   kv_cache: { user: string; team: string; seconds: number; reused_tokens: number; note: string }[];
   handcheck: { checked: number; agree: number };
-  /** Code with a larger open model drafting (added after the run); null until that run exists. */
-  open_models: {
-    muse_direct: number;
-    models: { run_id: string; model: string; alone: number; cascade: Record<"0.1" | "0.2", { accuracy: number; share: number; kept: number }> }[];
-    gain: Record<"alone" | "cascade_10", { points: number; interval: [number, number]; p_better: number }>;
-  } | null;
+  /** Each benchmark another open model drafted (all added after the run): every model that drafted it. */
+  open_models: Partial<Record<"swebench" | "locomo", { muse_direct: number; models: OpenModel[] }>>;
+};
+
+export type Gain = { points: number; interval: [number, number]; p_better: number };
+export type OpenModel = {
+  run_id: string;
+  label: string;
+  gpus: number;
+  reasoning: string; // reasoning strength; "" for a model that doesn't reason
+  alone: number;
+  cascade: Record<"0.1" | "0.2", { accuracy: number; share: number; kept: number }>;
+  auc: number;
+  fast_mode: { usd_per_1k: number; seconds_median: number }; // Muse + GPU per 1,000 questions, and the median wait
+  perfect_check: { wrong_drafts: number; accuracy: number; share: number };
+  gain?: Record<"alone" | "cascade_10", Gain>; // against the 8B on the same items; absent for the 8B
 };
 
 export type Poll = { usage: Usage | null; error: string | null };

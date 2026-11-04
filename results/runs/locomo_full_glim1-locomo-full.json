@@ -1,0 +1,33 @@
+{
+  "run_id": "glim1-locomo-full",
+  "bench": "locomo",
+  "baseline": "full",
+  "seed": 0,
+  "llama_model": "meta-models/Muse-Glimmer-30B",
+  "muse_model": "muse-spark-1.2",
+  "muse_is_standin": false,
+  "simulated": false,
+  "ingest_concurrency": 16,
+  "answer_temperature": 0.0,
+  "offline_replay": true,
+  "gate": "cascade",
+  "threshold": 0.46010524333317326,
+  "items": 300,
+  "accuracy": 0.57,
+  "in_context_rate": 0.9933333333333333,
+  "gold_in_hits_rate": 0.0,
+  "source_in_hits_rate": 0.6375838926174496,
+  "muse_prompt_tokens": 381960,
+  "muse_completion_tokens": 190404,
+  "llama_prompt_tokens": 454514,
+  "cached_tokens": 324672,
+  "compute_tokens": 430045,
+  "llama_seconds": 382.04,
+  "ingest_seconds": 0.0,
+  "ingest_pages": 0,
+  "ingest_fallback_rate": null,
+  "routes": {
+    "local_memory": 116,
+    "escalate_raw": 184
+  }
+}

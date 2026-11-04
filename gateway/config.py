@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # vllm: scope the KV cache with the cache_salt field and read cached_tokens.
     # ollama: scope it with a marker at the start of the prompt.
     llama_backend: Literal["ollama", "vllm"] = "ollama"
+    # For an open model that reasons (Muse Glimmer): its reasoning_strength (low, medium, high,
+    # xhigh), sent as a chat-template argument with every request. Empty: nothing sent (Llama).
+    llama_reasoning_strength: str = ""
 
     muse_base_url: str = "https://api.llama.com/compat/v1"
     muse_api_key: str = ""
@@ -47,3 +50,9 @@ class Settings(BaseSettings):
     # Optional sqlite file that stores every model response, so repeated experiments don't
     # call the model again (eval only; see gateway/llm.py).
     model_cache: str = ""
+
+    def llama_defaults(self) -> dict | None:
+        """What every request to the open model carries unless it sets its own."""
+        if not self.llama_reasoning_strength:
+            return None
+        return {"chat_template_kwargs": {"reasoning_strength": self.llama_reasoning_strength}}

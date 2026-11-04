@@ -39,16 +39,17 @@ ai-os is a separate single-user memory project. A literature review I wrote for 
 | `itara` CLI with accurate, fast and rule modes; dashboard (Vite + React); README | 3 Nov |
 | Cost per question and the comparison with RouteLLM ([`eval/cost_compare.py`](eval/cost_compare.py)) | 3 Nov |
 | Llama 3.3 70B as the open model, a simpler gate with a second opinion, and further confidence probes (after the results, reported as such) | 3 Nov |
+| Muse Glimmer 30B as the open model, on code and conversations (run `glim1`, after the results, reported as such) | 3 Nov |
 | Paper ([`paper/itara.pdf`](paper/itara.pdf)) | 3 Nov |
 | Demo video | 4 Nov |
 
-The north star set in the plan on 26 Oct (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, Muse's minimal reasoning effort and the 70B run were chosen after the results and are labelled that way everywhere they appear.
+The north star set in the plan on 26 Oct (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, Muse's minimal reasoning effort and the 70B and Glimmer runs were chosen after the results and are labelled that way everywhere they appear.
 
 ## Third-party components
 
 Used as dependencies, not authored by us, each under its own license.
 
-- **Models:** Meta Llama 3.1 8B and Llama 3.3 70B (Llama Community License; Built with Llama); Muse Spark through the Meta Model API
+- **Models:** Meta Llama 3.1 8B and Llama 3.3 70B (Llama Community License; Built with Llama); Muse Glimmer 30B (Apache 2.0); Muse Spark through the Meta Model API
 - **Serving and caching:** vLLM, LMCache
 - **Storage and retrieval:** PostgreSQL, pgvector; BAAI bge-small-en-v1.5 embeddings via fastembed
 - **Dashboard:** React, React Router, Vite
