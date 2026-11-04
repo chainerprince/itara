@@ -76,16 +76,27 @@ async def test_accurate_mode_sends_every_question_to_muse_with_memory(gateway):
     r = await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"))
     assert r.headers["x-gateway-route"] == "escalate_compact"
     assert services.llama.requests == []
-    assert "Vercel" in services.muse.requests[0]["messages"][0]["content"]
+    assert "vercel.json" in services.muse.requests[0]["messages"][0]["content"]
     usage = (await client.get("/v1/usage", headers=services.keys["admin"])).json()
     assert usage["gate"] == "always escalate"
+
+
+async def test_local_mode_keeps_every_question_on_the_open_model(gateway):
+    client, services = gateway
+    services.never_escalate = True
+    r = await client.post("/v1/chat/completions", json=chat("deploy frontend " + "x " * 900))
+    assert r.headers["x-gateway-route"] == "local_memory"  # the rule gate would escalate this
+    assert "Vercel" in services.llama.requests[0]["messages"][0]["content"]
+    assert services.muse.requests == []
+    usage = (await client.get("/v1/usage", headers=services.keys["admin"])).json()
+    assert usage["gate"] == "never escalate"
 
 
 async def test_escalation_is_paid_and_carries_memory(gateway):
     client, services = gateway
     r = await client.post("/v1/chat/completions", json=chat("deploy frontend " + "x " * 900))
     assert r.headers["x-gateway-route"] == "escalate_compact"
-    assert "Vercel" in services.muse.requests[0]["messages"][0]["content"]
+    assert "vercel.json" in services.muse.requests[0]["messages"][0]["content"]
     assert (await client.get("/v1/usage")).status_code == 403
     usage = (await client.get("/v1/usage", headers=services.keys["admin"])).json()
     assert usage["spent_usd"] == pytest.approx((100 * 1.0 + 10 * 2.0) / 1e6)
@@ -99,13 +110,37 @@ async def test_raw_override_sends_pages(gateway):
     assert "vercel.json" in services.muse.requests[0]["messages"][0]["content"]
 
 
-async def test_tool_calls_pass_through_unchanged(gateway):
+async def test_tool_calls_get_team_memory_and_skip_the_gate(gateway):
     client, services = gateway
-    body = chat("deploy the frontend", tools=[{"type": "function", "function": {"name": "f"}}])
+    tools = [{"type": "function", "function": {"name": "f"}}]
+    body = chat("how do we deploy the frontend", tools=tools)
+    r = await client.post("/v1/chat/completions", json=body)
+    assert r.headers["x-gateway-route"] == "escalate_compact"
+    sent = services.muse.requests[0]
+    assert "vercel.json" in sent["messages"][0]["content"] and sent["tools"] == tools
+    assert sent["messages"][-1] == body["messages"][-1]
+    assert services.llama.requests == []
+    assert r.json()["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "f"
+
+
+async def test_tool_calls_without_memory_pass_through_unchanged(gateway):
+    client, services = gateway
+    body = chat("zzqx", tools=[{"type": "function", "function": {"name": "f"}}])
     r = await client.post("/v1/chat/completions", json=body)
     assert r.headers["x-gateway-route"] == "passthrough"
     assert services.muse.requests[0]["messages"] == body["messages"]
-    assert r.json()["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "f"
+
+
+async def test_local_mode_never_calls_muse_even_with_tools(gateway):
+    client, services = gateway
+    services.never_escalate = True
+    tools = [{"type": "function", "function": {"name": "f"}}]
+    for text in ("how do we deploy the frontend", "zzqx"):
+        r = await client.post("/v1/chat/completions", json=chat(text, tools=tools))
+        assert r.status_code == 200 and r.headers["x-gateway-route"].startswith("local")
+    assert "Vercel" in services.llama.requests[0]["messages"][0]["content"]
+    assert services.llama.requests[0]["tools"] == tools
+    assert services.muse.requests == []
 
 
 async def test_streaming_clients_get_one_chunk(gateway):
@@ -257,3 +292,57 @@ async def test_dashboard_serves_the_app_and_its_pages(gateway):
     assert (await client.get("/dashboard/results.json")).json()["run_id"]
     r = await client.get("/dashboard/..%2F..%2Fgateway%2Fconfig.py")  # never outside dist
     assert "database_url" not in r.text
+
+
+async def test_muse_calls_carry_the_reserved_output_limit(gateway):
+    client, services = gateway
+    services.ledger.max_output_tokens = 64
+    await client.post("/v1/chat/completions", json=chat("deploy frontend " + "x " * 900))
+    await client.post("/v1/chat/completions",
+                      json=chat("deploy frontend " + "x " * 900, max_completion_tokens=10_000))
+    assert [r["max_tokens"] for r in services.muse.requests] == [64, 64]
+
+
+async def test_memory_is_compressed_once_and_kept_current(gateway):
+    client, services = gateway
+    calls = []
+
+    async def compress(body):
+        calls.append(body)
+        page = body["messages"][1]["content"].rsplit("\n\n", 1)[1]
+        return {"choices": [{"message": {"content": '{"summary": "%s", "keywords": []}' % page}}]}
+
+    services.llama.chat = compress
+    v1 = {"text": "rollback if p95 over 300ms", "source": "release.py@v1", "replace": True}
+    first = (await client.post("/v1/memory", json=v1)).json()
+    again = (await client.post("/v1/memory", json=v1)).json()
+    assert len(calls) == 1 and again["ids"] == first["ids"] and again["reused_pages"] == 1
+    # A new version replaces the old one: only the current text stays searchable.
+    v2 = {**v1, "text": "rollback if p95 over 250ms", "source": "release.py@v2"}
+    assert (await client.post("/v1/memory", json=v2)).json()["replaced_sources"] == ["release.py@v1"]
+    hits = await services.store.search(Scope("web", "frank"), "rollback p95")
+    assert [h.source for h in hits if h.source.startswith("release.py")] == ["release.py@v2"]
+    # And a source can be forgotten, by its team only.
+    r = await client.delete("/v1/memory", params={"source": "release.py@v2"},
+                            headers=services.keys["olga"])
+    assert r.json()["deleted_sources"] == []
+    r = await client.delete("/v1/memory", params={"source": "release.py@v2"})
+    assert r.json()["deleted_sources"] == ["release.py@v2"]
+    assert not [h for h in await services.store.search(Scope("web", "frank"), "rollback p95")
+                if h.source.startswith("release.py")]
+
+
+async def test_muse_gets_summaries_for_code_and_pages_for_docs(gateway):
+    client, services = gateway
+    team = Scope("ship", "sam")
+    await services.store.add(team, "deploy() in ship.py pushes the frontend build",
+                             ["deploy"], "def deploy(): push('frontend')", source="ship.py@1a2b3c4d")
+    await services.store.add(team, "The frontend deploys from main", ["deploy"],
+                             "release.md: deploy the frontend on Thursdays at 10:00",
+                             source="release.md")
+    services.always_escalate = True
+    await client.post("/v1/chat/completions", json=chat("how do we deploy the frontend"),
+                      headers=bearer(await services.principals.create("ship", "sam")))
+    sent = services.muse.requests[0]["messages"][0]["content"]
+    assert "deploy() in ship.py" in sent and "push('frontend')" not in sent  # code: summary
+    assert "Thursdays at 10:00" in sent and "deploys from main" not in sent  # doc: raw page

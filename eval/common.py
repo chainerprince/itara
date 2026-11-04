@@ -33,10 +33,14 @@ from gateway.server import Services, build_services, create_app
 from memory.store import Memory, Scope
 
 RESULTS = Path(__file__).parent.parent / "results" / "runs"
-BASELINES = ("muse_direct", "escalate_compact", "escalate_raw", "llama_only", "rule_gate",
-             "no_sharing", "full")
+BASELINES = ("muse_direct", "muse_question_only", "escalate_compact", "escalate_raw",
+             "escalate_pages", "llama_only", "rule_gate", "no_sharing", "full")
 FORCED_ROUTES = {"llama_only": "local_memory", "escalate_compact": "escalate_compact",
-                 "escalate_raw": "escalate_raw"}
+                 "escalate_raw": "escalate_raw", "escalate_pages": "escalate_pages"}
+# Muse called directly, without the gateway: with the full retrieved context, or with the
+# question alone (what the model knows without any context).
+DIRECT = {"muse_direct": lambda item: item.raw_context,
+          "muse_question_only": lambda item: item.question}
 COST_GUARD_USD = 5.0
 ANSWER_TEMPERATURE = 0.0  # without it vLLM samples Llama 3.1 at its default 0.6
 
@@ -184,12 +188,12 @@ class Harness:
         """Answer one item with one baseline (scoring is up to the benchmark)."""
         team = team or item.team_id
         in_context = evidence_visible(item, item.raw_context)
-        if baseline == "muse_direct":
+        if baseline in DIRECT:
             response, seconds = await self.paid_call(
-                Scope(team, user), "muse_direct",
-                {"messages": [{"role": "user", "content": item.raw_context}],
+                Scope(team, user), baseline,
+                {"messages": [{"role": "user", "content": DIRECT[baseline](item)}],
                  "temperature": ANSWER_TEMPERATURE})
-            result = self._result(item, baseline, user, "muse_direct", response, seconds)
+            result = self._result(item, baseline, user, baseline, response, seconds)
             result.in_context = in_context
             return result
         if baseline == "full" and self.services.gate is None:
@@ -198,7 +202,9 @@ class Harness:
             team = f"{team}:{user}"
         ingest_seconds, pages, fallbacks = await self.ingest(item, team, user)
         # The same search the gateway runs for this question, kept for diagnosis.
-        hits = await self.services.store.search(Scope(team, user), item.question)
+        hits = await self.services.store.search(
+            Scope(team, user), item.question,
+            kind="page" if baseline == "escalate_pages" else "summary")
         headers = await self.headers(team, user)
         if baseline in FORCED_ROUTES:
             headers["X-Gateway-Route"] = FORCED_ROUTES[baseline]
@@ -236,7 +242,7 @@ class Harness:
         usage = response.get("usage", {})
         prompt, completion = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
         cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
-        paid = route == "muse_direct" or route in ESCALATIONS
+        paid = route in DIRECT or route in ESCALATIONS
         return Result(
             item_id=item.id, baseline=baseline, user=user, route=route,
             answer=response["choices"][0]["message"].get("content") or "", score={},

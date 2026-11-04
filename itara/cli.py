@@ -3,6 +3,7 @@
     itara up                         # Postgres (Docker), the schema, then the gateway on :8000
     itara key add --team web --user alice [--admin]
     itara memory add src/ docs/ --key mg-…   # a team's code and docs, compressed once for all
+    itara memory rm docs/old.md --key mg-…   # forget a source
     itara status --key mg-…          # admin: who asked what, and where it went
     itara dashboard                  # the live topology and the benchmark results
     itara demo                       # two teammates share memory; another team can't see it
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -28,7 +30,7 @@ ROOT = Path(__file__).parent.parent
 DEFAULT_URL = "http://localhost:8000/v1"
 FAST_GATE = "results/runs/gate_full1_model.json"  # the cascade trained on the full run
 FAST_POINT = "results/runs/gate_full1.json"       # its 10% operating point on code (the README's)
-# Text worth remembering; code sources get @<commit> so escalations send them as summaries.
+# Text worth remembering; code sources get @<content hash> so escalations send them as summaries.
 CODE = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt", ".rb", ".php", ".c",
         ".h", ".cc", ".cpp", ".hpp", ".cs", ".swift", ".scala", ".sql", ".sh", ".toml", ".yaml",
         ".yml", ".json", ".html", ".css"}
@@ -79,6 +81,8 @@ def up(args) -> None:
     mode = "fast" if args.gate else args.mode
     if mode == "accurate":
         os.environ["ALWAYS_ESCALATE"] = "1"
+    elif mode == "local":
+        os.environ["NEVER_ESCALATE"] = "1"
     elif mode == "fast" and not args.gate:
         os.environ["GATE_PATH"] = str(ROOT / FAST_GATE)
         point = json.loads((ROOT / FAST_POINT).read_text())["cascade"]["operating_points"]["0.1"]["swebench"]
@@ -92,6 +96,7 @@ def up(args) -> None:
     wait_for_postgres(settings.database_url)
     init_database(settings.database_url, create=True)
     gate = ("accurate: every question to Muse with team memory" if settings.always_escalate
+            else "local: every question to the open model with team memory" if settings.never_escalate
             else f"fast: the confidence cascade ({settings.gate_path})" if settings.gate_path
             else "rule: the hand-written gate")
     print(f"\n  itara is up on http://{args.host}:{args.port}/v1  ·  mode: {gate}"
@@ -122,14 +127,9 @@ def key_add(args) -> None:
 
 # ───────── memory ─────────
 
-def commit_of(path: Path) -> str | None:
-    out = subprocess.run(["git", "rev-parse", "--short=8", "HEAD"], cwd=path if path.is_dir() else path.parent,
-                         capture_output=True, text=True, check=False)
-    return out.stdout.strip() or None
-
-
 def collect(paths: list[str]) -> list[tuple[str, Path]]:
-    """(source label, file) for every text file under paths. Code is labelled path@commit."""
+    """(source label, file) for every text file under paths. Code is labelled path@<hash of its
+    contents>, so a file that didn't change keeps its label (and its memory) across commits."""
     files = []
     for arg in paths:
         p = Path(arg)
@@ -142,7 +142,7 @@ def collect(paths: list[str]) -> list[tuple[str, Path]]:
                 continue
             label = f.as_posix() if not f.is_absolute() else f.name
             if suffix in CODE:
-                label += f"@{commit_of(f) or 'workdir'}"
+                label += f"@{hashlib.sha256(f.read_bytes()).hexdigest()[:8]}"
             files.append((label, f))
     return files
 
@@ -161,17 +161,34 @@ def memory_add(args) -> None:
             async def one(source: str, path: Path) -> int:
                 async with limit:
                     r = await gw.post("/memory", json={"text": path.read_text(errors="replace"),
-                                                       "source": source, "private": args.private})
+                                                       "source": source, "private": args.private,
+                                                       "replace": not args.keep_old})
                 r.raise_for_status()
-                print(f"  {source}: {len(r.json()['ids'])} pages")
-                return len(r.json()["ids"])
+                out = r.json()
+                new = len(out["ids"]) - out.get("reused_pages", 0)
+                print(f"  {source}: {new} new pages, {out.get('reused_pages', 0)} already in memory"
+                      + (f", replaced {', '.join(out['replaced_sources'])}"
+                         if out.get("replaced_sources") else ""))
+                return len(out["ids"]), new
 
             start = time.monotonic()
-            pages = sum(await asyncio.gather(*(one(s, p) for s, p in files)))
-            print(f"{pages} pages from {len(files)} files in {time.monotonic() - start:.0f}s, "
+            counts = await asyncio.gather(*(one(s, p) for s, p in files))
+            pages, new = sum(c[0] for c in counts), sum(c[1] for c in counts)
+            print(f"{pages} pages from {len(files)} files ({new} compressed now, the rest already "
+                  f"in memory) in {time.monotonic() - start:.0f}s, "
                   f"{'private to you' if args.private else 'shared with your team'}")
 
     asyncio.run(send())
+
+
+def memory_rm(args) -> None:
+    import httpx
+
+    r = httpx.delete(f"{args.url}/memory", params={"source": args.source, "private": args.private},
+                     headers={"Authorization": f"Bearer {need_key(args)}"}, timeout=60)
+    r.raise_for_status()
+    removed = r.json()["deleted_sources"]
+    print(f"Forgot {', '.join(removed)}" if removed else f"Nothing in memory from {args.source}")
 
 
 # ───────── status ─────────
@@ -229,10 +246,11 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("up", help="start Postgres (Docker), apply the schema, run the gateway")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
-    p.add_argument("--mode", choices=["accurate", "fast", "rule"], default="accurate",
+    p.add_argument("--mode", choices=["accurate", "fast", "local", "rule"], default="accurate",
                    help="accurate: every question to Muse with team memory (the default); "
                         "fast: Llama answers what it's sure of, by the confidence cascade; "
-                        "rule: the hand-written gate")
+                        "local: every request to the open model with team memory, tool calls "
+                        "included; nothing goes to Muse; rule: the hand-written gate")
     p.add_argument("--gate", help="fast mode with a gate saved by eval/learn_gate.py (sets GATE_PATH)")
     p.add_argument("--no-docker", action="store_true", help="Postgres is already running")
     p.set_defaults(run=up)
@@ -248,9 +266,17 @@ def main(argv: list[str] | None = None) -> None:
     p = mem.add_parser("add", help="add files or folders (code and docs) to memory")
     p.add_argument("paths", nargs="+")
     p.add_argument("--private", action="store_true", help="only you can read it (default: your team)")
+    p.add_argument("--keep-old", action="store_true",
+                   help="keep earlier versions of these files in memory (default: replace them)")
     url_option(p)
     key_option(p)
     p.set_defaults(run=memory_add)
+    p = mem.add_parser("rm", help="forget a source (as `memory add` labelled it, e.g. src/app.py@1a2b3c4d)")
+    p.add_argument("source")
+    p.add_argument("--private", action="store_true", help="from your private memory")
+    url_option(p)
+    key_option(p)
+    p.set_defaults(run=memory_rm)
 
     p = sub.add_parser("status", help="who asked what, and where it went (admin)")
     url_option(p)

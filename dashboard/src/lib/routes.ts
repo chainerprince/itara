@@ -18,6 +18,6 @@ export const ROUTE_LABEL: Record<string, string> = {
   local_memory: "Llama, with team memory",
   escalate_compact: "Muse, with memory summaries",
   escalate_raw: "Muse, with raw pages",
-  passthrough: "Muse, tool call passed through",
+  passthrough: "Muse, tool call with no team memory",
   ingest: "Added to memory",
 };

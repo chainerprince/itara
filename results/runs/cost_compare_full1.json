@@ -29,8 +29,36 @@
           "seconds_p90": 30.074800000000003
         },
         {
+          "name": "Muse, question only",
+          "note": "no context at all",
+          "accuracy": 0.8133333333333334,
+          "escalated": 1.0,
+          "muse_usd_per_1k": 20.640815,
+          "gpu_usd_per_1k": 0.0,
+          "memory_build_usd_per_1k": 0.0,
+          "usd_per_1k": 20.640815,
+          "usd_per_1k_correct": 25.378051229508195,
+          "seconds_median": 17.012999999999998,
+          "seconds_mean": 24.783686666666668,
+          "seconds_p90": 44.5072
+        },
+        {
+          "name": "Muse + raw pages, searched directly",
+          "note": "no summaries: nothing to build",
+          "accuracy": 0.8533333333333334,
+          "escalated": 1.0,
+          "muse_usd_per_1k": 15.789284166666663,
+          "gpu_usd_per_1k": 0.0,
+          "memory_build_usd_per_1k": 0.0,
+          "usd_per_1k": 15.789284166666663,
+          "usd_per_1k_correct": 18.503067382812496,
+          "seconds_median": 16.402288582998153,
+          "seconds_mean": 20.912277250680297,
+          "seconds_p90": 40.73340425379429
+        },
+        {
           "name": "Muse + retrieved raw pages",
-          "note": "retrieval, no compression",
+          "note": "pages behind the retrieved summaries",
           "accuracy": 0.87,
           "escalated": 1.0,
           "muse_usd_per_1k": 15.370949166666666,
@@ -113,6 +141,20 @@
           "seconds_p90": 23.57919557923451
         },
         {
+          "name": "Itara fast mode, live",
+          "note": "the 10% threshold in the gateway; seconds measured end to end",
+          "accuracy": 0.7266666666666667,
+          "escalated": 0.37,
+          "muse_usd_per_1k": 5.8723225,
+          "gpu_usd_per_1k": 5.470099759816667,
+          "memory_build_usd_per_1k": 2.8626185198166674,
+          "usd_per_1k": 11.342422259816667,
+          "usd_per_1k_correct": 15.60883797222477,
+          "seconds_median": 1.8890677290037274,
+          "seconds_mean": 10.964609855443463,
+          "seconds_p90": 32.377873933999226
+        },
+        {
           "name": "RouteLLM router, 10% budget",
           "note": "off the shelf, decides before any draft; threshold chosen on these items",
           "accuracy": 0.6833333333333333,
@@ -142,6 +184,48 @@
         }
       ],
       "muse_direct_usd_per_1k_without_runaways": 29.751683724832215,
+      "sensitivity": [
+        {
+          "name": "Muse, full context",
+          "cached_prompt_share": 0.0,
+          "usd_per_1k": 37.085565,
+          "usd_per_1k_without_runaways": 29.751683724832215,
+          "usd_per_1k_cached_pricing": 37.085565,
+          "usd_per_1k_both": 29.751683724832215
+        },
+        {
+          "name": "Muse, question only",
+          "cached_prompt_share": 0.00647418368988258,
+          "usd_per_1k": 20.640815,
+          "usd_per_1k_without_runaways": 16.888702181208053,
+          "usd_per_1k_cached_pricing": 20.637273,
+          "usd_per_1k_both": 16.885154906442928
+        },
+        {
+          "name": "Muse + raw pages, searched directly",
+          "cached_prompt_share": 0.02081101287970464,
+          "usd_per_1k": 15.789284166666663,
+          "usd_per_1k_without_runaways": 15.661357382550335,
+          "usd_per_1k_cached_pricing": 15.719984166666666,
+          "usd_per_1k_both": 15.592003955838337
+        },
+        {
+          "name": "Muse + retrieved raw pages",
+          "cached_prompt_share": 0.007357177831676516,
+          "usd_per_1k": 18.23356768648333,
+          "usd_per_1k_without_runaways": 18.097764492971027,
+          "usd_per_1k_cached_pricing": 18.20987735315,
+          "usd_per_1k_both": 18.074058799430446
+        },
+        {
+          "name": "Muse + team memory",
+          "cached_prompt_share": 0.3088601797986971,
+          "usd_per_1k": 16.111335186483334,
+          "usd_per_1k_without_runaways": 15.975295533239487,
+          "usd_per_1k_cached_pricing": 15.77007485315,
+          "usd_per_1k_both": 15.633727474977526
+        }
+      ],
       "router_auc": {
         "routellm_bert": 0.5300976993381658,
         "itara_cascade": 0.6466615640898654
@@ -169,7 +253,7 @@
         },
         {
           "name": "Muse + retrieved raw pages",
-          "note": "retrieval, no compression",
+          "note": "pages behind the retrieved summaries",
           "accuracy": 0.6266666666666667,
           "escalated": 1.0,
           "muse_usd_per_1k": 6.655648333333333,
@@ -281,6 +365,32 @@
         }
       ],
       "muse_direct_usd_per_1k_without_runaways": 27.219243333333335,
+      "sensitivity": [
+        {
+          "name": "Muse, full context",
+          "cached_prompt_share": 0.9246007955604867,
+          "usd_per_1k": 27.219243333333335,
+          "usd_per_1k_without_runaways": 27.219243333333335,
+          "usd_per_1k_cached_pricing": 8.578195642891183,
+          "usd_per_1k_both": 8.578195642891183
+        },
+        {
+          "name": "Muse + retrieved raw pages",
+          "cached_prompt_share": 0.08561918075432583,
+          "usd_per_1k": 7.29611359873,
+          "usd_per_1k_without_runaways": 7.29611359873,
+          "usd_per_1k_cached_pricing": 7.100438866620346,
+          "usd_per_1k_both": 7.100438866620346
+        },
+        {
+          "name": "Muse + team memory",
+          "cached_prompt_share": 0.07820308284259672,
+          "usd_per_1k": 5.51544609873,
+          "usd_per_1k_without_runaways": 5.51544609873,
+          "usd_per_1k_cached_pricing": 5.4744304325853514,
+          "usd_per_1k_both": 5.4744304325853514
+        }
+      ],
       "router_auc": {
         "routellm_bert": 0.5476380728554642,
         "itara_cascade": 0.7420446533490012

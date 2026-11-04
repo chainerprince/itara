@@ -71,3 +71,28 @@ def test_worst_case_is_an_upper_bound_for_code():
     ledger = Ledger(pool=None, cap_usd=1, input_price_per_m=1e6, output_price_per_m=0)
     code = "x=f(a,b);" * 100  # ~1 token per 2-3 characters
     assert ledger.worst_case_cost({"messages": [{"content": code}]}) >= len(code) / 2
+
+
+def test_output_is_limited_to_what_is_reserved():
+    ledger = Ledger(pool=None, cap_usd=1, input_price_per_m=0, output_price_per_m=1e6,
+                    max_output_tokens=100)
+    assert ledger.limited({"messages": []})["max_tokens"] == 100
+    assert ledger.limited({"messages": [], "max_tokens": 10})["max_tokens"] == 10
+    limited = ledger.limited({"messages": [], "max_completion_tokens": 5000})
+    assert limited["max_tokens"] == 100 and "max_completion_tokens" not in limited
+    # Each of n choices can write the whole limit.
+    assert ledger.worst_case_cost(ledger.limited({"messages": [], "n": 3})) == pytest.approx(300)
+
+
+def test_prompt_bound_counts_every_byte():
+    ledger = Ledger(pool=None, cap_usd=1, input_price_per_m=1e6, output_price_per_m=0)
+    text = "é" * 1000  # 2 bytes each; dense text can tokenize at close to a token per byte
+    body = {"messages": [{"role": "user", "content": text}], "max_tokens": 1}
+    assert ledger.worst_case_cost(body) >= 2000
+
+
+def test_cached_prompt_tokens_at_their_own_price():
+    ledger = Ledger(pool=None, cap_usd=1, input_price_per_m=1.25, output_price_per_m=4.25,
+                    cached_input_price_per_m=0.15)
+    assert ledger.cost(1_000_000, 0, cached_tokens=1_000_000) == pytest.approx(0.15)
+    assert ledger.cost(1_000_000, 1_000_000, cached_tokens=0) == pytest.approx(5.5)

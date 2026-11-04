@@ -115,14 +115,14 @@ export function Results() {
     <>
       <h1>Results</h1>
       <p className="lede">
-        All 300 SWE-bench Lite issues and 300 LoCoMo questions, on Llama 3.1 8B (vLLM on a Modal H100) and Muse Spark 1.2.
+        All 300 SWE-bench Lite issues (file localization: name the files the fix changes) and 300 LoCoMo questions, on Llama 3.1 8B (vLLM on a Modal H100) and Muse Spark 1.2.
         Gates are scored on repos and conversations they didn't train on.
       </p>
 
       <div className="verdict">
-        <span className="mark">Matches Muse on code.</span>
+        <span className="mark">Muse's accuracy on code, for less.</span>
         <span className="quiet">
-          {pct(compact.accuracy)} against {pct(runs.swebench.muse_direct.accuracy)} with the full context, at about a quarter of its tokens. Muse reads {pct(compact.input_share, 0)} of the context.
+          {pct(compact.accuracy)} against {pct(runs.swebench.muse_direct.accuracy)} with the full context (within the interval), at about a quarter of its tokens. Muse reads {pct(compact.input_share, 0)} of the context.
         </span>
       </div>
       <p className="note">

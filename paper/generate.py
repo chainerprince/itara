@@ -78,6 +78,69 @@ def wide(df: pd.DataFrame, bench: str, column: str = "correct") -> pd.DataFrame:
     return df[df.bench == bench].pivot(index="item_id", columns="baseline", values=column)[present].dropna()
 
 
+def review() -> None:
+    """Checks added on 4 Nov after an outside review: Muse with the question alone, Muse with raw
+    pages searched directly (no summaries), the cascade run live in the gateway (run live2), and
+    the cost's sensitivity to the runaways and to cached-input pricing (eval/cost_compare.py)."""
+    def hits(run_id: str, baseline: str) -> dict[str, bool]:
+        path = RUNS / "raw" / f"swebench_{baseline}_{run_id}-swebench-{baseline}.jsonl"
+        return {r["item_id"]: bool(r["score"]["hit"]) for r in map(json.loads, path.read_text().splitlines())}
+
+    def signed(x: float) -> str:
+        return f"{100 * x:+.1f}".replace("-", "$-$")
+
+    compact = hits(RUN_ID, "escalate_compact")
+    rng = np.random.default_rng(SEED)
+    for key, run_id, baseline in (("QuestionOnly", RUN_ID, "muse_question_only"),
+                                  ("Pages", RUN_ID, "escalate_pages"), ("Live", "live2", "full")):
+        other = hits(run_id, baseline)
+        ids = sorted(set(other) & set(compact))
+        a = np.array([compact[i] for i in ids], float)
+        o = np.array([other[i] for i in ids], float)
+        idx = rng.integers(0, len(ids), size=(B, len(ids)))
+        gap = a[idx].mean(axis=1) - o[idx].mean(axis=1)
+        macro(f"acc{key}", p1(o.mean()))
+        macro(f"count{key}", str(int(o.sum())))
+        macro(f"memoryOver{key}", signed(a.mean() - o.mean()))
+        macro(f"memoryOver{key}Lo", signed(np.percentile(gap, 2.5)))
+        macro(f"memoryOver{key}Hi", signed(np.percentile(gap, 97.5)))
+    macro("countCompact", str(int(sum(compact.values()))))
+    macro("countDirect", str(int(sum(hits(RUN_ID, "muse_direct").values()))))
+
+    cost = json.loads((RUNS / f"cost_compare_{RUN_ID}.json").read_text())
+    swe, loco = cost["benchmarks"]["swebench"], cost["benchmarks"]["locomo"]
+    live = next(o for o in swe["options"] if o["name"] == "Itara fast mode, live")
+    macro("liveEscalated", f"{100 * live['escalated']:.0f}")
+    macro("liveMedian", f"{live['seconds_median']:.1f}")
+    macro("liveNinety", f"{live['seconds_p90']:.1f}")
+    macro("liveUsd", f"{live['usd_per_1k']:.2f}")
+    pages = next(o for o in swe["options"] if o["name"] == "Muse + raw pages, searched directly")
+    macro("usdPagesDirect", f"{pages['usd_per_1k']:.2f}")
+    memory = next(o for o in swe["options"] if o["name"] == "Muse + team memory")
+    macro("museUsdPagesDirect", f"{pages['muse_usd_per_1k']:.2f}")
+    macro("museUsdMemory", f"{memory['muse_usd_per_1k']:.2f}")
+    macro("museDropPages", f"{100 * (1 - memory['muse_usd_per_1k'] / pages['muse_usd_per_1k']):.0f}")
+    # Questions on the same memory after which the build has paid for itself against raw pages.
+    build_usd = memory["memory_build_usd_per_1k"] / 1000 * swe["items"]
+    macro("breakEvenPages",
+          f"{build_usd / ((pages['muse_usd_per_1k'] - memory['muse_usd_per_1k']) / 1000):,.0f}")
+    for key, baseline in (("Pages", "escalate_pages"), ("Compact", "escalate_compact")):
+        path = RUNS / "raw" / f"swebench_{baseline}_{RUN_ID}-swebench-{baseline}.jsonl"
+        prompts = [r["muse_prompt_tokens"] for r in map(json.loads, path.read_text().splitlines())]
+        macro(f"prompt{key}", f"{np.mean(prompts):,.0f}")
+    question = next(o for o in swe["options"] if o["name"] == "Muse, question only")
+    macro("usdQuestionOnly", f"{question['usd_per_1k']:.2f}")
+    sens = {(b, s["name"]): s for b, bench in (("swe", swe), ("loco", loco)) for s in bench["sensitivity"]}
+    d, m = sens["swe", "Muse, full context"], sens["swe", "Muse + team memory"]
+    macro("usdMemoryNoRunaway", f"{m['usd_per_1k_without_runaways']:.2f}")
+    macro("dropMemoryNoRunaway",
+          f"{100 * (1 - m['usd_per_1k_without_runaways'] / d['usd_per_1k_without_runaways']):.0f}")
+    macro("cachedShareSwe", f"{100 * d['cached_prompt_share']:.0f}")
+    d, m = sens["loco", "Muse, full context"], sens["loco", "Muse + team memory"]
+    macro("usdLocoDirectCached", f"{d['usd_per_1k_cached_pricing']:.2f}")
+    macro("usdLocoMemoryCached", f"{m['usd_per_1k_cached_pricing']:.2f}")
+
+
 def main_table(df: pd.DataFrame, gate: dict) -> dict:
     rng = np.random.default_rng(SEED)
     star = {}
@@ -273,7 +336,10 @@ def dollars() -> None:
     """What a question costs: Muse, the GPU and latency per option (eval/cost_compare.py)."""
     cost = json.loads((RUNS / f"cost_compare_{RUN_ID}.json").read_text())
     swe, loco = cost["benchmarks"]["swebench"], cost["benchmarks"]["locomo"]
-    labels = {"Muse, full context": "Muse, full context", "Muse + retrieved raw pages": "Muse + raw pages",
+    labels = {"Muse, full context": "Muse, full context", "Muse, question only": "Muse, question only$^\\ddagger$",
+              "Muse + raw pages, searched directly": "Raw pages, direct$^\\ddagger$",
+              "Itara fast mode, live": "Cascade 10\\%, live$^\\ddagger$",
+              "Muse + retrieved raw pages": "Muse + raw pages",
               "Muse + team memory": "Muse + team memory", "Rule gate": "Rule gate",
               "Random escalation": "Random escalation", "Itara cascade, 10% budget": "Cascade, 10\\%",
               "Itara cascade, 20% budget": "Cascade, 20\\%$^\\dagger$",
@@ -505,6 +571,7 @@ def main() -> None:
     budgets(gate)
     effort()
     dollars()
+    review()
     bigger()
     open_model_table()
     data = scaling()

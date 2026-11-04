@@ -6,8 +6,10 @@
     uv run python -m eval.run swebench --baseline muse_direct --resume 20261028-101500
     uv run python -m eval.run replay   --baseline no_sharing --users 1,2,4 --per-user 2
 
-Baselines: muse_direct (no gateway, raw context to Muse), escalate_compact (always escalate
-with memory summaries), escalate_raw (always escalate with the raw pages behind them),
+Baselines: muse_direct (no gateway, raw context to Muse), muse_question_only (no gateway, the
+question alone to Muse), escalate_compact (always escalate with memory summaries),
+escalate_raw (always escalate with the raw pages behind them), escalate_pages (always
+escalate with raw pages searched directly, no summaries),
 llama_only (never escalate), rule_gate (the gateway with the rule-based gate), no_sharing
 (replay only: no shared memory or cache), full (the learned gate live, with GATE_PATH set;
 its measured numbers come from eval/learn_gate.py, which replays it offline).
@@ -24,7 +26,7 @@ import asyncio
 import time
 
 from eval import locomo, replay, swebench_loc
-from eval.common import BASELINES, Harness, RunLog, check_cost, new_run_id, summarise
+from eval.common import BASELINES, DIRECT, Harness, RunLog, check_cost, new_run_id, summarise
 
 
 def worst_case_bodies(items, baseline: str, judged: bool) -> list[dict]:
@@ -73,16 +75,25 @@ async def run_bench(args) -> None:
         check_cost(harness.ledger, worst_case_bodies(todo, args.baseline, bench is locomo),
                    args.yes)
         print(f"Run {run_id}: {len(items) - len(todo)} done, {len(todo)} to go")
-        if args.baseline != "muse_direct":
+        if args.baseline not in DIRECT:
             await harness.ingest_all(items, user)
-        for n, item in enumerate(todo, 1):
-            result = await harness.ask(item, args.baseline, user=user)
-            if bench is swebench_loc:
-                result.score = swebench_loc.score(item, result.answer)
-            else:
-                result.score = await locomo.judge(harness, item, result.answer, user)
+        # Items in flight at once (--concurrency): each result's seconds then include any
+        # queueing at the models, as under real load.
+        limit, finished = asyncio.Semaphore(args.concurrency), 0
+
+        async def one(item) -> None:
+            nonlocal finished
+            async with limit:
+                result = await harness.ask(item, args.baseline, user=user)
+                if bench is swebench_loc:
+                    result.score = swebench_loc.score(item, result.answer)
+                else:
+                    result.score = await locomo.judge(harness, item, result.answer, user)
             log.append(result)
-            print(f"[{n}/{len(todo)}] {item.id} {result.route} {result.score}")
+            finished += 1
+            print(f"[{finished}/{len(todo)}] {item.id} {result.route} {result.score}", flush=True)
+
+        await asyncio.gather(*(one(item) for item in todo))
         headline = "hit" if bench is swebench_loc else "correct"
         summary = {"bench": args.bench, "baseline": args.baseline, "seed": args.seed,
                    **harness.labels(), **summarise(log.results(), headline)}
@@ -120,6 +131,8 @@ def main() -> None:
     parser.add_argument("--per-user", type=int, default=2, help="replay: tasks per engineer")
     parser.add_argument("--order", choices=["related", "random"], default="related",
                         help="replay: how tasks are picked")
+    parser.add_argument("--concurrency", type=int, default=1,
+                        help="items answered at once (default 1: one at a time)")
     parser.add_argument("--yes", action="store_true", help="allow a worst case over $5")
     args = parser.parse_args()
     if args.bench == "replay":

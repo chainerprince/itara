@@ -9,7 +9,7 @@ stands in (see .env.example). To deploy:
     modal deploy modal_app.py
     # then the CLOUD block in .env: LLAMA_BASE_URL=<printed url>/v1, LLAMA_BACKEND=vllm
 
-MODEL, GPU, LMCACHE and MODAL_APP come from the environment at deploy time (defaults: Llama
+MODEL, GPU, LMCACHE, TOOL_PARSER and MODAL_APP come from the environment at deploy time (defaults: Llama
 3.1 8B Instruct on an H100, app memory-gateway-llama), e.g.
     MODEL=meta-llama/Llama-3.2-3B-Instruct GPU=L4 modal deploy modal_app.py
 A GPU count (GPU=H100:2) splits the model across the GPUs (tensor parallel). A second
@@ -22,6 +22,9 @@ or Muse Glimmer 30B (bf16, ~60 GB) on one H100, with LLAMA_REASONING_STRENGTH=lo
 
 One container at most: a second would cost a second GPU and split the prefix cache, so
 requests beyond max_inputs queue instead (keep INGEST_CONCURRENCY at or below 32).
+
+TOOL_PARSER lets the open model answer requests with tools (vLLM's tool-call parser for the
+model; default llama3_json for Llama, none for other models), which local mode sends it.
 
 LMCACHE=1 adds LMCache (CPU offload of the KV cache). Prefix-chained hashing is kept and
 CacheBlend is off: scoping by cache_salt relies on every block's key depending on the
@@ -41,6 +44,7 @@ GPU = os.environ.get("GPU", "H100")
 LMCACHE = os.environ.get("LMCACHE", "0") == "1"
 APP = os.environ.get("MODAL_APP", "memory-gateway-llama")
 TENSOR_PARALLEL = int(GPU.split(":")[1]) if ":" in GPU else 1
+TOOL_PARSER = os.environ.get("TOOL_PARSER", "llama3_json" if "llama" in MODEL.lower() else "")
 MAX_MODEL_LEN = 16384
 # Muse Glimmer (Meta's open 30B, Apache 2.0) reasons before it answers. It needs Meta's vLLM
 # build (CUDA 13.0, which Modal's driver supports) and its reasoning parser, which moves the
@@ -63,7 +67,8 @@ else:
     )
 # Containers re-import this file, so pin the deploy-time choices into the image.
 image = image.env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": "/models", "MODEL": MODEL,
-                   "LMCACHE": "1" if LMCACHE else "0", "GPU": GPU, "MODAL_APP": APP})
+                   "LMCACHE": "1" if LMCACHE else "0", "GPU": GPU, "MODAL_APP": APP,
+                   "TOOL_PARSER": TOOL_PARSER})
 weights = modal.Volume.from_name("memory-gateway-weights", create_if_missing=True)
 app = modal.App(APP, image=image)
 
@@ -110,6 +115,8 @@ def serve():
     ]
     if TENSOR_PARALLEL > 1:
         cmd += ["--tensor-parallel-size", str(TENSOR_PARALLEL)]
+    if TOOL_PARSER:
+        cmd += ["--enable-auto-tool-choice", "--tool-call-parser", TOOL_PARSER]
     if GLIMMER:
         cmd += ["--reasoning-parser", "muse_glimmer",
                 "--limit-mm-per-prompt", '{"image": 0, "video": 0}']

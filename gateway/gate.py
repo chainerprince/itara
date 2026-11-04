@@ -43,10 +43,12 @@ class Route(StrEnum):
     LOCAL_MEMORY = "local_memory"          # Llama + memory summaries
     ESCALATE_COMPACT = "escalate_compact"  # Muse + memory summaries
     ESCALATE_RAW = "escalate_raw"          # Muse + raw pages behind the summaries
-    PASSTHROUGH = "passthrough"            # tool calls: sent to Muse unchanged
+    ESCALATE_PAGES = "escalate_pages"      # Muse + raw pages searched directly, no summaries
+    PASSTHROUGH = "passthrough"            # tool calls with no team memory: Muse, unchanged
 
 
-ESCALATIONS = {Route.ESCALATE_COMPACT, Route.ESCALATE_RAW, Route.PASSTHROUGH}
+ESCALATIONS = {Route.ESCALATE_COMPACT, Route.ESCALATE_RAW, Route.ESCALATE_PAGES,
+               Route.PASSTHROUGH}
 
 
 def has_tools(body: dict) -> bool:
@@ -277,9 +279,13 @@ class LearnedGate:
         return Route(max(self.routes, key=lambda r: probabilities[r] - lam * costs[r]))
 
 
+def is_code(memory: Memory) -> bool:
+    return "@" in (memory.source or "")  # code sources end in @<version>
+
+
 def escalation_route(hits: list[Memory]) -> Route:
     """Summaries for code memory, raw pages for anything else (conversations, docs)."""
-    code = sum("@" in (h.source or "") for h in hits)  # code sources end in @<commit>
+    code = sum(map(is_code, hits))
     return Route.ESCALATE_COMPACT if hits and code * 2 >= len(hits) else Route.ESCALATE_RAW
 
 

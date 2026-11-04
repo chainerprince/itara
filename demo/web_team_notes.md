@@ -14,6 +14,12 @@
   question straight to Muse would cost. Accuracy comes first; the gate's threshold is set
   for that budget, not for the cheapest possible bill.
 
+- **Release 4.2 "Kestrel" (31 Oct).** The new checkout ships on Thursday 13 November at
+  10:00 UTC behind the `checkout_v2` flag, 5% of traffic first, then 50% on Monday 17 November.
+  Owner: Marco. Roll back (turn the flag off, no redeploy) if checkout p95 latency stays above
+  900 ms for 10 minutes or the payment error rate passes 1.5%. Dana must be told within an
+  hour of any rollback.
+
 ## Runbook
 
 - **Spend cap reached (HTTP 402):** check `GET /v1/usage` with an admin key. Raising the cap

@@ -12,10 +12,12 @@ The dashboard is at http://localhost:8000/dashboard; it asks for an admin key
 It makes fresh keys for alice and bob (team web), olga (team ops) and an admin (team web),
 straight in the database; they are never printed. Then:
 1. alice adds the team's code (this repo's gateway/, memory/ and cache/ packages, labelled
-   with the commit) and the team's notes (demo/web_team_notes.md) to web's memory. Docs
-   already in memory are skipped, so reruns don't add them twice.
+   with a hash of each file, as `itara memory add` does) and the team's notes
+   (demo/web_team_notes.md) to web's memory. The gateway compresses each page once: on a
+   rerun every page is already there, and the output says so.
 2. The scripted questions run as each engineer, and each answer shows the route the gateway
-   took (X-Gateway-Route), the model and its tokens.
+   took (X-Gateway-Route), the model, its tokens and the time it took. One comes from a coding
+   agent, with tools attached: it skips the gate but still gets the team's memory.
 3. The admin reads /v1/usage: what Muse cost, and what Llama did.
 
 With the cascade gate (GATE_PATH), a question Llama is sure of stays on Llama; one it isn't
@@ -28,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import subprocess
+import hashlib
 import time
 from pathlib import Path
 
@@ -37,7 +39,6 @@ from psycopg_pool import AsyncConnectionPool
 
 from gateway.auth import Principals
 from gateway.config import Settings
-from memory.store import MemoryStore, Scope
 
 ROOT = Path(__file__).parent.parent
 CODE = ["gateway", "memory", "cache"]
@@ -55,23 +56,24 @@ SCRIPT = [
             "tables and SQL queries have to change, and how do concurrent reservations stay "
             "correct?",
      "a hard design question: the gate should send it to Muse with compact memory"),
-    ("alice", "Why did we pick row-level security instead of one database per team?",
-     "a decision recorded only in the team's notes"),
-    ("olga", "Why did the web team pick row-level security instead of one database per team?",
+    ("bob", "When does the Kestrel release ship, who owns it, and when do we roll it back?",
+     "a decision recorded only in the team's notes: no model knows it on its own"),
+    ("bob", "Open the file where the gateway reserves Muse spend before a call.",
+     "a coding agent, with tools attached: no gate, but the team's memory still goes with it"),
+    ("olga", "When does the web team's Kestrel release ship, and when do they roll it back?",
      "another team: none of web's memory is visible to ops"),
 ]
-
-
-def git_commit() -> str:
-    out = subprocess.run(["git", "rev-parse", "--short=8", "HEAD"], cwd=ROOT,
-                         capture_output=True, text=True)
-    return out.stdout.strip() or "workdir"
+# The tool a coding agent sends with its request (the gateway passes tools through unchanged).
+AGENT_TOOLS = [{"type": "function", "function": {
+    "name": "open_file", "description": "Open a file in the repository",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}},
+                   "required": ["path"]}}}]
 
 
 def team_docs() -> list[tuple[str, str]]:
-    """(source, text): code sources end in @<commit>, like the SWE-bench memory."""
-    commit = git_commit()
-    docs = [(f"{p.relative_to(ROOT)}@{commit}", p.read_text())
+    """(source, text): code sources end in @<hash of the file>, like the SWE-bench memory."""
+    docs = [(f"{p.relative_to(ROOT)}@{hashlib.sha256(p.read_bytes()).hexdigest()[:8]}",
+             p.read_text())
             for package in CODE for p in sorted((ROOT / package).glob("*.py"))
             if p.read_text().strip()]
     return docs + [(f"{NOTES.relative_to(ROOT)}", NOTES.read_text())]
@@ -81,7 +83,11 @@ def show(who: str, why: str, question: str, r: httpx.Response, seconds: float) -
     body = r.json()
     usage = body.get("usage", {})
     cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
-    answer = " ".join((body["choices"][0]["message"].get("content") or "").split())
+    message = body["choices"][0]["message"]
+    answer = " ".join((message.get("content") or "").split())
+    if message.get("tool_calls"):
+        answer = (answer + " " if answer else "") + "tool call: " + ", ".join(
+            f"{c['function']['name']}({c['function']['arguments']})" for c in message["tool_calls"])
     print(f"\n── {who}: {why}")
     print(f"   Q: {question}")
     print(f"   route {r.headers.get('x-gateway-route')} · {r.headers.get('x-gateway-memory-hits', 0)} "
@@ -100,33 +106,34 @@ async def main(args) -> None:
                 "bob": await principals.create("web", "bob"),
                 "olga": await principals.create("ops", "olga"),
                 "admin": await principals.create("web", "demo-admin", is_admin=True)}
-        store = MemoryStore(pool, embed=None)  # only asks whether a doc is in memory
-        todo = [(s, t) for s, t in team_docs() if not await store.has_source(Scope("web", "alice"), s)]
+    docs = team_docs()
 
     def auth(who: str) -> dict:
         return {"Authorization": f"Bearer {keys[who]}"}
 
     async with httpx.AsyncClient(base_url=args.url, timeout=900) as gw:
-        print(f"Adding {len(todo)} docs to team web's memory (alice)…")
+        print(f"Adding {len(docs)} docs to team web's memory (alice)…")
         start = time.monotonic()
         limit = asyncio.Semaphore(8)  # docs in flight; the gateway caps compression calls
 
-        async def add(source: str, text: str) -> int:
+        async def add(source: str, text: str) -> tuple[int, int]:
             async with limit:
-                r = await gw.post("/memory", json={"text": text, "source": source},
-                                  headers=auth("alice"))
+                r = await gw.post("/memory", json={"text": text, "source": source,
+                                                   "replace": True}, headers=auth("alice"))
             r.raise_for_status()
-            return len(r.json()["ids"])
+            return len(r.json()["ids"]), r.json().get("reused_pages", 0)
 
-        pages = sum(await asyncio.gather(*(add(s, t) for s, t in todo)))
-        if todo:
-            print(f"  {pages} memory pages in {time.monotonic() - start:.0f}s (paid once, for the team)")
+        counts = await asyncio.gather(*(add(s, t) for s, t in docs))
+        pages, reused = sum(c[0] for c in counts), sum(c[1] for c in counts)
+        print(f"  {pages} memory pages in {time.monotonic() - start:.0f}s: {pages - reused} compressed "
+              f"now, {reused} already in memory (each page is compressed once, for the team)")
 
         for who, question, why in SCRIPT:
+            agent = "tools attached" in why
             start = time.monotonic()
             r = await gw.post("/chat/completions", headers=auth(who), json={
                 "model": "itara", "messages": [{"role": "user", "content": question}],
-                "temperature": 0})
+                "temperature": 0, **({"tools": AGENT_TOOLS} if agent else {})})
             r.raise_for_status()
             show(who, why, question, r, time.monotonic() - start)
 

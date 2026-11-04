@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS memories (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- content_hash: a page's source and text, hashed (memory/compress.py page_hash), so the same
+-- page is compressed and stored once per scope. Pages stored before it existed have none.
+ALTER TABLE memories ADD COLUMN IF NOT EXISTS content_hash text;
+CREATE UNIQUE INDEX IF NOT EXISTS memories_page_hash_idx
+    ON memories (team_id, coalesce(owner_id, ''), content_hash)
+    WHERE kind = 'page' AND content_hash IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS memories_scope_idx ON memories (team_id, owner_id, kind);
 CREATE INDEX IF NOT EXISTS memories_parent_idx ON memories (parent_id);
 CREATE INDEX IF NOT EXISTS memories_tsv_idx ON memories USING gin (tsv);

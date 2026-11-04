@@ -11,8 +11,9 @@ def test_memory_add_picks_text_files_and_labels_code(tmp_path, monkeypatch):
     (tmp_path / "big.py").write_text("x" * 300_000)
     monkeypatch.chdir(tmp_path)
     labels = [label for label, _ in collect(["."])]
-    # Code carries @<commit> (none here: not a git repo), so escalations send its summaries.
-    assert labels == ["app.py@workdir", "docs/notes.md"]
+    # Code carries @<hash of its contents>, so escalations send its summaries and an unchanged
+    # file keeps its label across commits.
+    assert labels == ["app.py@2d711642", "docs/notes.md"]
 
 
 def test_status_needs_a_key(monkeypatch, capsys):
@@ -31,7 +32,7 @@ def test_up_modes_set_the_gateway(monkeypatch):
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
     monkeypatch.setattr(cli, "wait_for_postgres", lambda url: None)
     monkeypatch.setattr("memory.schema.init_database", lambda *a, **k: None)
-    for var in ("ALWAYS_ESCALATE", "GATE_PATH", "GATE_THRESHOLD"):
+    for var in ("ALWAYS_ESCALATE", "NEVER_ESCALATE", "GATE_PATH", "GATE_THRESHOLD"):
         monkeypatch.delenv(var, raising=False)
     cli.main(["up", "--no-docker"])
     assert os.environ["ALWAYS_ESCALATE"] == "1"
@@ -39,3 +40,6 @@ def test_up_modes_set_the_gateway(monkeypatch):
     cli.main(["up", "--no-docker", "--mode", "fast"])
     assert os.environ["GATE_PATH"].endswith(cli.FAST_GATE)
     assert 0 < float(os.environ["GATE_THRESHOLD"]) < 1  # the 10% operating point, not the file's
+    monkeypatch.delenv("GATE_PATH")
+    cli.main(["up", "--no-docker", "--mode", "local"])
+    assert os.environ["NEVER_ESCALATE"] == "1"

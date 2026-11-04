@@ -30,7 +30,7 @@ from gateway.auth import Principal, Principals
 from gateway.config import Settings
 from gateway.gate import (ESCALATIONS, FEATURES, CascadeGate, LearnedGate, Route,
                           draft_confidence, estimated_prompt_tokens, gate_features, has_tools,
-                          load_gate, rule_gate)
+                          is_code, load_gate, rule_gate)
 from gateway.llm import ChatClient
 from memory.compress import ingest
 from memory.store import MemoryStore, Scope, default_embedder
@@ -53,6 +53,7 @@ class Services:
     ingest_concurrency: int = 1
     gate: LearnedGate | CascadeGate | None = None  # None: the rule-based gate
     always_escalate: bool = False  # every question to Muse with memory summaries, no gate
+    never_escalate: bool = False   # every question to the open model with memory, no gate
     # One limit for the whole process, so concurrent ingests can't multiply it.
     ingest_limit: asyncio.Semaphore | None = field(init=False, default=None)
 
@@ -67,7 +68,8 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
     services = Services(
         store=MemoryStore(pool, default_embedder()),
         ledger=Ledger(pool, settings.spend_cap_usd,
-                      settings.muse_input_price_per_m, settings.muse_output_price_per_m),
+                      settings.muse_input_price_per_m, settings.muse_output_price_per_m,
+                      settings.muse_cached_input_price_per_m, settings.muse_max_output_tokens),
         llama=ChatClient(settings.llama_base_url, settings.llama_api_key, settings.llama_model,
                          cache_path=settings.model_cache, defaults=settings.llama_defaults()),
         muse=ChatClient(settings.muse_base_url, settings.muse_api_key, settings.muse_model,
@@ -78,8 +80,11 @@ async def build_services(settings: Settings) -> tuple[Services, AsyncConnectionP
         llama_backend=settings.llama_backend,
         muse_is_standin=settings.muse_is_standin,
         ingest_concurrency=settings.ingest_concurrency,
-        gate=load_gate(settings.gate_path) if settings.gate_path and not settings.always_escalate else None,
+        gate=(load_gate(settings.gate_path)
+              if settings.gate_path and not (settings.always_escalate or settings.never_escalate)
+              else None),
         always_escalate=settings.always_escalate,
+        never_escalate=settings.never_escalate,
     )
     if isinstance(services.gate, CascadeGate) and settings.gate_threshold is not None:
         services.gate.threshold = settings.gate_threshold
@@ -90,6 +95,9 @@ class MemoryIn(BaseModel):
     text: str
     source: str | None = None
     private: bool = False
+    # Replace what memory held for this source before: older versions (the same name before
+    # the last "@", as in path@hash) and pages the new text no longer has.
+    replace: bool = False
 
 
 async def principal_of(request: Request) -> Principal:
@@ -191,7 +199,16 @@ def create_app(services: Services | None = None) -> FastAPI:
             return body
         if route == Route.ESCALATE_RAW:
             memories = await s.store.pages(scope, [h.id for h in hits])
-        elif route in (Route.LOCAL_MEMORY, Route.ESCALATE_COMPACT):
+        elif route == Route.ESCALATE_PAGES:
+            memories = await s.store.search(scope, last_user_text(body["messages"]), kind="page")
+        elif route == Route.ESCALATE_COMPACT:
+            # Summaries for code; for docs and conversations, whose summaries can drop the
+            # details (a date, a threshold), the raw page behind each one. Measured: summaries
+            # win on code (SWE-bench), raw pages on conversations (LoCoMo).
+            pages = {p.parent_id: p for p in await s.store.pages(
+                scope, [h.id for h in hits if not is_code(h)])}
+            memories = [h if is_code(h) else pages.get(h.id, h) for h in hits]
+        elif route == Route.LOCAL_MEMORY:
             memories = hits
         else:
             memories = []
@@ -207,6 +224,8 @@ def create_app(services: Services | None = None) -> FastAPI:
         """Call the route's model with a prepared request and record the usage."""
         paid = route in ESCALATIONS
         client = s.muse if paid else s.llama
+        if paid:  # the reserved output is the output the model may write
+            body = s.ledger.limited(body)
         estimate = s.ledger.worst_case_cost(body) if paid else 0.0
         async with s.ledger.reserve(estimate) if paid else nullcontext():
             start = time.monotonic()
@@ -249,15 +268,22 @@ def create_app(services: Services | None = None) -> FastAPI:
         if not isinstance(body, dict) or not isinstance(body.get("messages"), list):
             raise HTTPException(400, "Request body needs a messages list")
 
+        question = last_user_text(body["messages"])
+        hits = await s.store.search(scope, question)
         if has_tools(body):
-            route = Route.PASSTHROUGH
-            response = await answer(s, scope, route, body, [])
+            # Agents skip the gate (it learned to judge plain answers, not tool calls) but still
+            # get team memory: from Muse, or from the open model in local mode.
+            if s.never_escalate:
+                route = Route.LOCAL_MEMORY if hits else Route.LOCAL
+            else:
+                route = Route.ESCALATE_COMPACT if hits else Route.PASSTHROUGH
+            response = await answer(s, scope, route, body, hits)
         else:
-            question = last_user_text(body["messages"])
-            hits = await s.store.search(scope, question)
             route = route_override(request, principal)
             if route is None and s.always_escalate:
                 route = Route.ESCALATE_COMPACT
+            if route is None and s.never_escalate:
+                route = Route.LOCAL_MEMORY if hits else Route.LOCAL
             if route is None and s.gate is not None:
                 # Cascade: Llama drafts with memory; the gate keeps the draft or escalates.
                 local = await prepare(s, scope, Route.LOCAL_MEMORY, body, hits)
@@ -290,15 +316,25 @@ def create_app(services: Services | None = None) -> FastAPI:
         scope = (await principal_of(request)).scope
         request_id = uuid4()
         start = time.monotonic()
-        ids, usages, fallbacks = await ingest(s.store, s.llama, scope, item.text,
-                                              source=item.source, private=item.private,
-                                              limit=s.ingest_limit)
+        ids, usages, fallbacks, reused = await ingest(s.store, s.llama, scope, item.text,
+                                                      source=item.source, private=item.private,
+                                                      limit=s.ingest_limit)
+        replaced = (await s.store.delete_source(scope, item.source, item.private, keep=ids)
+                    if item.replace and item.source else [])
         # Wall time per call: with concurrent ingest that's throughput, not one call's latency.
         latency_ms = int((time.monotonic() - start) * 1000) // max(1, len(usages))
         for page_usage in usages:  # compression is local work the team pays for once
             await s.ledger.record(scope, s.llama.model, "ingest", page_usage, latency_ms,
                                   paid=False, request_id=request_id)
-        return {"ids": [str(i) for i in ids], "fallback_pages": fallbacks}
+        return {"ids": [str(i) for i in ids], "fallback_pages": fallbacks,
+                "reused_pages": reused, "replaced_sources": replaced}
+
+    @app.delete("/v1/memory")
+    async def delete_memory(source: str, request: Request, private: bool = False):
+        """Forget a source (its summaries and pages) from the caller's team or private memory."""
+        s: Services = request.app.state.services
+        scope = (await principal_of(request)).scope
+        return {"deleted_sources": await s.store.delete_source(scope, source, private)}
 
     @app.get("/v1/usage")
     async def usage(request: Request):
@@ -312,6 +348,7 @@ def create_app(services: Services | None = None) -> FastAPI:
                 "muse_model": s.muse.model, "muse_is_standin": s.muse_is_standin,
                 "llama_model": s.llama.model, "llama_backend": s.llama_backend,
                 "gate": ("always escalate" if s.always_escalate
+                         else "never escalate" if s.never_escalate
                          else type(s.gate).__name__ if s.gate else "rule"),
                 # The KV cache key each team's shared memory is cached under (cache/lmcache.py).
                 "cache_scopes": {t: cache_scope(Scope(t, ""), []) for t in teams},

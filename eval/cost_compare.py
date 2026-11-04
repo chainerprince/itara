@@ -29,6 +29,19 @@ Added on 3 Nov, after the run. For each option, per question:
   cascade, chosen on these items (which favours it).
 - **Team scale:** the replay's pages ingested per engineer, priced at the full run's measured
   build rate (H100 seconds per ingest call).
+
+Added on 4 Nov, after an outside review, on the same items and memory:
+
+- **Muse with the question alone** (no context): what Muse knows of these public repos.
+- **Muse with raw pages searched directly** (no summaries anywhere): the pages are embedded on
+  the CPU, so no memory build is charged.
+- **Fast mode, live:** the cascade at its 10% threshold running in the gateway
+  (`eval.run --baseline full`, run `live2`), 6 questions at a time. Its seconds are measured end
+  to end; GPU time is the ledger's Llama call time (calls that overlap counted in full).
+- **Sensitivity** for the Muse-only options: without the questions where full-context Muse ran
+  to its output limit (the same questions dropped from every option), and with the prompt
+  tokens Muse's API served from its cache priced at its cached rate (each option's share from
+  the ledger; $0.15 per million unless MUSE_CACHED_INPUT_PRICE_PER_M says otherwise).
 """
 
 from __future__ import annotations
@@ -43,13 +56,27 @@ import psycopg
 
 from eval.common import RESULTS
 from eval.learn_gate import (BENCHES, CONFIDENCE_FEATURES, HEADLINE, Ledger, Route,
-                             cascade_choose, cascade_out_of_fold, load_rows)
+                             cascade_choose, cascade_out_of_fold, load_rows, run_results)
 from gateway.config import Settings
 
 H100_USD_PER_S = 0.001097  # Modal's listed H100 price, $3.95 an hour (GPU only)
 DRAWS, SEED = 1000, 0
 OUTPUT_LIMIT = 262_144     # Muse's output limit: answers that reach it are runaways
+CACHED_INPUT_USD_PER_M = 0.15  # Muse's listed price for cached prompt tokens (4 Nov 2026)
+LIVE_RUN = "live2"         # fast mode run live in the gateway (eval.run --baseline full)
 LOCAL = Route.LOCAL_MEMORY.value
+
+
+async def ledger_share(url: str, user: str) -> tuple[float, float]:
+    """A run's share of Muse prompt tokens served from Muse's cache, and its Llama call seconds."""
+    async with await psycopg.AsyncConnection.connect(url) as conn:
+        cur = await conn.execute(
+            "SELECT sum(cached_tokens) FILTER (WHERE model NOT LIKE 'meta-llama%%')::float"
+            "       / nullif(sum(prompt_tokens) FILTER (WHERE model NOT LIKE 'meta-llama%%'), 0),"
+            " coalesce(sum(latency_ms) FILTER (WHERE model LIKE 'meta-llama%%'), 0) / 1000.0"
+            " FROM usage WHERE user_id = %s", (user,))
+        share, llama_s = await cur.fetchone()
+    return float(share or 0.0), float(llama_s or 0.0)
 
 
 async def ledger_facts(url: str, run_id: str, bench: str) -> tuple[float, int, float]:
@@ -165,8 +192,19 @@ async def main(args) -> None:
         out["muse_direct_usd_per_1k_without_runaways"] = 1000 * float(np.mean(
             [price(direct[r["item"]].muse_prompt_tokens, direct[r["item"]].muse_completion_tokens)
              for r in rs if r["item"] not in runaway]))
+        extra = {b: run_results(muse_run, bench, b) for b in ("muse_question_only", "escalate_pages")}
+        extra = {b: res for b, res in extra.items() if all(r["item"] in res for r in rs)}
+        refs.update(extra)
+        if "muse_question_only" in extra:
+            out["options"].append(option("Muse, question only", *fixed("muse_question_only", memory=False),
+                                         memory=False, build_s=build_s, note="no context at all"))
+        if "escalate_pages" in extra:
+            out["options"].append(option("Muse + raw pages, searched directly",
+                                         *fixed("escalate_pages", memory=True), memory=False,
+                                         build_s=build_s, note="no summaries: nothing to build"))
         out["options"].append(option("Muse + retrieved raw pages", *fixed("escalate_raw", memory=True),
-                                     memory=True, build_s=build_s, note="retrieval, no compression"))
+                                     memory=True, build_s=build_s,
+                                     note="pages behind the retrieved summaries"))
         out["options"].append(option("Muse + team memory", *fixed("escalate_compact", memory=True),
                                      memory=True, build_s=build_s, note="compression, no routing"))
         if all(r["item"] in refs["rule_gate"] for r in rs):
@@ -192,6 +230,42 @@ async def main(args) -> None:
             out["options"].append(option(f"Itara cascade, {float(budget):.0%} budget", *composed(picked, True),
                                          memory=True, build_s=build_s,
                                          note="" if budget == "0.1" else "budget chosen after the run"))
+        live = run_results(LIVE_RUN, bench, "full")
+        if live and all(r["item"] in live for r in rs):
+            res = [live[r["item"]] for r in rs]
+            _, llama_s = await ledger_share(url, f"eval-{LIVE_RUN}-{bench}-full")
+            out["options"].append(option(
+                "Itara fast mode, live", [bool(x.score.get(HEADLINE[bench])) for x in res],
+                [price(x.muse_prompt_tokens, x.muse_completion_tokens) for x in res],
+                np.full(len(res), llama_s / len(res) * gpus), [x.seconds for x in res],
+                [x.route != LOCAL for x in res], memory=True, build_s=build_s,
+                note="the 10% threshold in the gateway; seconds measured end to end"))
+
+        # Sensitivity of the Muse-only options to the runaways and to cached-input pricing.
+        cached_rate = settings.muse_cached_input_price_per_m
+        cached_rate = CACHED_INPUT_USD_PER_M if cached_rate is None else cached_rate
+        keep = np.array([r["item"] not in runaway for r in rs])
+        out["sensitivity"] = []
+        for name, baseline, memory in (("Muse, full context", "muse_direct", False),
+                                       ("Muse, question only", "muse_question_only", False),
+                                       ("Muse + raw pages, searched directly", "escalate_pages", False),
+                                       ("Muse + retrieved raw pages", "escalate_raw", True),
+                                       ("Muse + team memory", "escalate_compact", True)):
+            if baseline not in refs or not all(r["item"] in refs[baseline] for r in rs):
+                continue
+            res = [refs[baseline][r["item"]] for r in rs]
+            share, _ = await ledger_share(url, f"eval-{muse_run}-{bench}-{baseline}")
+            muse = np.array([price(x.muse_prompt_tokens, x.muse_completion_tokens) for x in res])
+            prompt_usd = np.array([price(x.muse_prompt_tokens, 0) for x in res])
+            cached = muse - prompt_usd * share * (1 - cached_rate / settings.muse_input_price_per_m)
+            build = (build_s / len(rs) if memory else 0.0) * H100_USD_PER_S
+            out["sensitivity"].append({
+                "name": name, "cached_prompt_share": share,
+                "usd_per_1k": 1000 * (muse.mean() + build),
+                "usd_per_1k_without_runaways": 1000 * (muse[keep].mean() + build),
+                "usd_per_1k_cached_pricing": 1000 * (cached.mean() + build),
+                "usd_per_1k_both": 1000 * (cached[keep].mean() + build)})
+
         if scores:
             win = [scores[(bench, r["item"])] for r in rs]
             ref_spent = sum(direct[r["item"]].muse_prompt_tokens + direct[r["item"]].muse_completion_tokens
@@ -233,6 +307,10 @@ async def main(args) -> None:
             print(f"  {o['name']:34} {o['accuracy']:6.1%} {o['escalated']:5.0%} {o['muse_usd_per_1k']:7.2f}"
                   f" {o['gpu_usd_per_1k']:6.2f} {o['usd_per_1k']:7.2f} {o['usd_per_1k_correct']:8.2f}"
                   f" {o['seconds_median']:6.1f} {o['seconds_mean']:6.1f} {o['seconds_p90']:6.1f}")
+        for s in out.get("sensitivity", []):
+            print(f"  sensitivity {s['name']:36} $/1k {s['usd_per_1k']:6.2f}  without runaways"
+                  f" {s['usd_per_1k_without_runaways']:6.2f}  cached pricing {s['usd_per_1k_cached_pricing']:6.2f}"
+                  f" (cached share {s['cached_prompt_share']:.0%})  both {s['usd_per_1k_both']:6.2f}")
         if "router_auc" in out:
             print("  AUC for 'Llama's draft is wrong':", {k: round(v, 3) for k, v in out["router_auc"].items()})
     for order in ("related", "random"):

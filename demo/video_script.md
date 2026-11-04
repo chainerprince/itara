@@ -25,13 +25,13 @@ uv run itara dashboard
 
 > Every engineer on a team sends the same codebase, docs and decisions to an expensive closed model, over and over. The company pays for the same context once per person, per question.
 >
-> Itara is a self-hosted gateway a whole team shares. On code, it cuts the closed-model bill by 57% at the same accuracy. In fast mode it cuts 68%, and answers come back in about two seconds instead of twelve.
+> Itara is a self-hosted gateway a whole team shares: ingest the repo once, and every teammate's tools get that context. On code, it keeps the closed model's accuracy at 57% lower estimated cost. In fast mode, measured live, the median answer comes back in under two seconds instead of twelve.
 
 ## 0:20–0:40 · What it is
 
 **[README "How it works" diagram, or stay on the dashboard]**
 
-> It speaks the OpenAI API, so any app or coding agent just changes its base URL.
+> It speaks the OpenAI API, so chat apps, scripts and coding agents just change their base URL. Agents with tools get the team's memory too.
 >
 > Behind it: Llama 3.1 8B on vLLM. A team memory in Postgres, sealed per team by row-level security. A KV cache keyed by permission. And Muse Spark, Meta's closed model, called only when Llama isn't sure.
 
@@ -54,12 +54,18 @@ uv run itara dashboard
 > Now Bob asks a hard design question.
 > *Llama drafts it, but it isn't confident, so the path turns violet: Muse gets the team's memory summaries, not raw files.*
 >
-> Olga, on the ops team, asks about the web team's decision.
+> Bob asks when the Kestrel release ships and when to roll it back. No model knows that: it's only in the team's notes.
+> *The answer names Marco, 13 November, and the 900 ms rollback condition. Read the route and the time off the screen.*
+>
+> Bob's coding agent asks for the file that reserves Muse spend, with its tools attached.
+> *No gate for tool calls, but the team's memory goes with it: the agent's tool call opens the right file.*
+>
+> Olga, on the ops team, asks the same Kestrel question.
 > *She's in her own sealed box. None of web's memory reaches her, and with its own cache key her team can't even time web's cache.*
 
 **[The figures at the top of Live: questions kept on Llama, share reused from the cache, Muse spend]**
 
-> Every token is counted, per person and per team, and a hard spending cap is checked before every Muse call.
+> Every token is counted, per person and per team. Every Muse call is capped at a fixed output, and that worst case is reserved against the spending cap before it's sent. Run the ingest again and nothing is compressed twice.
 
 ## 1:40–2:35 · What we measured
 
@@ -67,7 +73,7 @@ uv run itara dashboard
 
 > We ran all 300 SWE-bench Lite issues and 300 LoCoMo conversation questions on the real models.
 >
-> On code, Itara works. With the team's memory, Muse matches its full-context accuracy, 86.3% against 86%, for 57% less, GPU included. It reads under a tenth of the context. In fast mode, Llama answers what it's sure of: 68% less, with a median answer in 2.3 seconds, at 74%.
+> We measured file localization: name the files the real fix changes. With the team's memory, Muse gets 86.3% against 86% with the full context, for 57% less, GPU included. Muse alone, with no context, gets 81%, and costs more, because it reasons longer. Plain retrieval of raw files is a strong baseline at 85%; summaries match it and send Muse a third of the prompt. And fast mode, run live in the gateway: 72.7%, with a median answer in 1.9 seconds.
 
 **[Code chart: the cascade curve]**
 
@@ -108,6 +114,8 @@ Don't say "it passes" or "we hit 10%". The full analysis is in `results/full_run
 ## Checks
 
 - The numbers match `dashboard/results.json` (default effort), `results/full_run.ipynb` and the README.
-- Say "57% less" (cost with the GPU included) or "about a quarter of the tokens", not "23%": two runaway Muse answers inflate the token denominator.
+- Say "57% less" (estimated cost with the GPU included) or "about a quarter of the tokens", not "23%": two runaway Muse answers inflate the token denominator. Without them it's 46% less.
+- Say "file localization", not "SWE-bench accuracy": no patches are generated.
+- Fast mode's 1.9 s median and 72.7% are measured live (run `live2`); 74.0% and 2.3 s are the offline replay.
 - The 70B run was added after the main run: say "we then tried", never that it was planned. Don't say it reached the north star.
 - Lead with what works, but keep "not there yet" for the north star and "chosen after the run" for the 25% point. Judges will check the numbers against the repo.

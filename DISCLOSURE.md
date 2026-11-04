@@ -39,11 +39,13 @@ ai-os is a separate single-user memory project. A literature review I wrote for 
 | `itara` CLI with accurate, fast and rule modes; dashboard (Vite + React); README | 3 Nov |
 | Cost per question and the comparison with RouteLLM ([`eval/cost_compare.py`](eval/cost_compare.py)) | 3 Nov |
 | Llama 3.3 70B as the open model, a simpler gate with a second opinion, and further confidence probes (after the results, reported as such) | 3 Nov |
-| Muse Glimmer 30B as the open model, on code and conversations (run `glim1`, after the results, reported as such) | 3 Nov |
+| Muse Glimmer 30B as the open model, on code and conversations (run `glim1`, after the results, reported as such); a local mode that never escalates | 3 Nov |
 | Paper ([`paper/itara.pdf`](paper/itara.pdf)) | 3 Nov |
+| After an outside review: two more baselines on code (Muse with the question alone; Muse with raw pages searched directly), fast mode run live in the gateway (run `live2`), and cost sensitivity to runaway answers and cached-input pricing (all after the results, reported as such) | 4 Nov |
+| After the same review: tool requests get team memory; local mode never calls Muse; Muse output limited to what the spend cap reserves; ingest compresses each page once, replaces changed files and can forget a source; Muse gets raw pages instead of summaries for docs and conversations | 4 Nov |
 | Demo video | 4 Nov |
 
-The north star set in the plan on 26 Oct (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, Muse's minimal reasoning effort and the 70B and Glimmer runs were chosen after the results and are labelled that way everywhere they appear.
+The north star set in the plan on 26 Oct (within 3 points of Muse with the full context at ≤ 10% of its tokens) has **not been reached yet**. Budgets of 20% and 25%, Muse's minimal reasoning effort, the 70B and Glimmer runs and the 4 Nov checks were chosen after the results and are labelled that way everywhere they appear.
 
 ## Third-party components
 

@@ -1,14 +1,16 @@
 """Exact token accounting and a hard cap on closed-model spend.
 
-Costs come from the token counts each API response reports. Before a paid call, the
-worst-case cost (estimated prompt + max_tokens) is reserved, so concurrent requests
-can't push total spend past the cap. The reservation lives in this process, so run the
-server with a single worker.
+Costs come from the token counts each API response reports. Before a paid call, its output
+is limited to max_output_tokens (sent upstream as max_tokens) and its worst-case cost is
+reserved: every prompt byte as a token, plus the output limit for each of its n choices. So
+concurrent requests can't push total spend past the cap. The reservation lives in this
+process, so run the server with a single worker.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from uuid import UUID
@@ -17,7 +19,10 @@ from psycopg_pool import AsyncConnectionPool
 
 from memory.store import Scope
 
-DEFAULT_MAX_TOKENS = 1024
+# Muse reasons before it answers: no measured answer through Itara passed 15K tokens, but two
+# answers to the full context ran to the API's 262,144-token limit.
+DEFAULT_MAX_OUTPUT_TOKENS = 32_768
+MESSAGE_OVERHEAD_TOKENS = 16  # role and template tokens around each message
 
 
 class SpendCapExceeded(Exception):
@@ -31,22 +36,41 @@ class Ledger:
         cap_usd: float,
         input_price_per_m: float,
         output_price_per_m: float,
+        cached_input_price_per_m: float | None = None,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ) -> None:
         self._pool = pool
         self.cap_usd = cap_usd
         self._input_price = input_price_per_m
         self._output_price = output_price_per_m
+        # None: cached prompt tokens are billed like any other.
+        self._cached_price = (input_price_per_m if cached_input_price_per_m is None
+                              else cached_input_price_per_m)
+        self.max_output_tokens = max_output_tokens
         self._reserved = 0.0
         self._lock = asyncio.Lock()
 
-    def cost(self, prompt_tokens: int, completion_tokens: int) -> float:
-        return (prompt_tokens * self._input_price + completion_tokens * self._output_price) / 1e6
+    def cost(self, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> float:
+        return ((prompt_tokens - cached_tokens) * self._input_price
+                + cached_tokens * self._cached_price
+                + completion_tokens * self._output_price) / 1e6
+
+    def limited(self, body: dict) -> dict:
+        """The body with its output limited to max_output_tokens (or less, if it asks for less)."""
+        asked = body.get("max_completion_tokens") or body.get("max_tokens") or self.max_output_tokens
+        body = {k: v for k, v in body.items() if k != "max_completion_tokens"}
+        return {**body, "max_tokens": min(asked, self.max_output_tokens)}
 
     def worst_case_cost(self, body: dict) -> float:
-        # ~2 characters per token: an upper bound even for code, which tokenizes densely.
-        prompt = len(str(body.get("messages", "")) + str(body.get("tools", ""))) // 2 + 1
-        completion = body.get("max_completion_tokens") or body.get("max_tokens") or DEFAULT_MAX_TOKENS
-        return self.cost(prompt, completion)
+        # A token is at least one byte, so the prompt's bytes bound its tokens.
+        messages = body.get("messages") or []
+        prompt = (len(json.dumps(messages, ensure_ascii=False).encode())
+                  + len(json.dumps(body.get("tools") or body.get("functions") or [],
+                                   ensure_ascii=False).encode())
+                  + MESSAGE_OVERHEAD_TOKENS * (len(messages) + 1))
+        completion = (body.get("max_completion_tokens") or body.get("max_tokens")
+                      or self.max_output_tokens)
+        return self.cost(prompt, completion * (body.get("n") or 1))
 
     async def spent(self) -> float:
         async with self._pool.connection() as conn:
@@ -89,7 +113,7 @@ class Ledger:
         elif estimated:
             cost = estimate_usd
         else:
-            cost = self.cost(prompt, completion)
+            cost = self.cost(prompt, completion, min(cached, prompt))
         async with self._pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO usage (team_id, user_id, model, route, prompt_tokens, completion_tokens,"

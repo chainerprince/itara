@@ -25,10 +25,16 @@ class Settings(BaseSettings):
     muse_model: str = "muse-spark"
     muse_input_price_per_m: float = 0.0
     muse_output_price_per_m: float = 0.0
+    # Prompt tokens the provider served from its cache, when it bills them lower. Unset: billed
+    # at muse_input_price_per_m.
+    muse_cached_input_price_per_m: float | None = None
+    # The most output one Muse call may write (sent as max_tokens), and what the spend cap
+    # reserves for it. Callers can ask for less.
+    muse_max_output_tokens: int = 32_768
     # True while "Muse" is a local open model; reported with every usage and eval number.
     muse_is_standin: bool = False
     # Muse's reasoning effort (e.g. minimal, low) for every request sent to it that doesn't set
-    # its own: escalations, tool-call passthrough and eval's muse_direct. Empty: Muse's default.
+    # its own: escalations, tool calls and eval's muse_direct. Empty: Muse's default.
     # Reasoning is most of an escalation's Muse tokens (results/full_run.ipynb, section 3).
     muse_reasoning_effort: str = ""
 
@@ -43,6 +49,9 @@ class Settings(BaseSettings):
     # Send every question to Muse with the team's memory summaries, with no gate: the most
     # accurate setting measured (`itara up --mode accurate`). Overrides gate_path.
     always_escalate: bool = False
+    # Answer every request with the open model and team memory, tool calls included: nothing
+    # is sent to Muse (`itara up --mode local`). Overrides gate_path.
+    never_escalate: bool = False
     # The cascade gate's threshold on P(draft right), instead of the saved one: higher
     # escalates more. eval/learn_gate.py prints the threshold for each budget.
     gate_threshold: float | None = None
