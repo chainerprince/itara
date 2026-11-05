@@ -20,6 +20,7 @@ eval/data/
 
 # Dashboard app: dependencies stay local; dashboard/dist is committed so Itara runs without Node
 dashboard/node_modules/
+dashboard/.vite/
 
 # Recording material and scratch pages stay local
 demo/
