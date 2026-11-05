@@ -13,7 +13,7 @@ It makes fresh keys for alice and bob (team web), olga (team ops) and an admin (
 straight in the database; they are never printed. Then:
 1. alice adds the team's code (this repo's gateway/, memory/ and cache/ packages, labelled
    with a hash of each file, as `itara memory add` does) and the team's notes
-   (demo/web_team_notes.md) to web's memory. The gateway compresses each page once: on a
+   (scripts/web_team_notes.md) to web's memory. The gateway compresses each page once: on a
    rerun every page is already there, and the output says so.
 2. The scripted questions run as each engineer, and each answer shows the route the gateway
    took (X-Gateway-Route), the model, its tokens and the time it took. One comes from a coding
@@ -42,7 +42,7 @@ from gateway.config import Settings
 
 ROOT = Path(__file__).parent.parent
 CODE = ["gateway", "memory", "cache"]
-NOTES = ROOT / "demo" / "web_team_notes.md"
+NOTES = ROOT / "scripts" / "web_team_notes.md"
 
 # (engineer, question, what it shows)
 SCRIPT = [

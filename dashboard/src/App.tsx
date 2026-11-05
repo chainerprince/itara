@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Route, Routes } from "react-router";
 import { useAdminKey } from "./lib/key";
+import { Demo } from "./pages/Demo";
 import { Live } from "./pages/Live";
 import { Results } from "./pages/Results";
 
@@ -11,7 +12,8 @@ export function App() {
         <div className="top-inner">
           <NavLink to="/" className="wordmark"><i aria-hidden="true" />itara</NavLink>
           <nav className="nav">
-            <NavLink to="/" end>Live</NavLink>
+            <NavLink to="/" end>Demo</NavLink>
+            <NavLink to="/live">Live</NavLink>
             <NavLink to="/results">Results</NavLink>
           </nav>
           <div className="top-right">
@@ -21,7 +23,8 @@ export function App() {
       </header>
       <main className="page">
         <Routes>
-          <Route path="/" element={<Live adminKey={key} setKey={setKey} />} />
+          <Route path="/" element={<Demo />} />
+          <Route path="/live" element={<Live adminKey={key} setKey={setKey} />} />
           <Route path="/results" element={<Results />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -5,7 +5,7 @@
     itara memory add src/ docs/ --key mg-…   # a team's code and docs, compressed once for all
     itara memory rm docs/old.md --key mg-…   # forget a source
     itara status --key mg-…          # admin: who asked what, and where it went
-    itara dashboard                  # the live topology and the benchmark results
+    itara dashboard                  # the animated demo, the live topology and the benchmark results
     itara demo                       # two teammates share memory; another team can't see it
 
 Settings come from the environment or a .env file in the current directory (.env.example

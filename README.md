@@ -1,5 +1,9 @@
 # Itara
 
+> Sam Altman [says](https://boingboing.net/2026/10/30/keeping-ram-in-personal-computers-quite-terrible-says-openais-sam-altman.html) it's "quite terrible" that your laptop's RAM sits idle 95% of the time. Want to see something worse? RAM that's busy doing the same work ten times over.
+
+Engineers are AI's heaviest users, and a team works in one codebase. Every engineer sends the model the same files, docs and decisions, and the model reads and recomputes that context for each of them. Itara does that work once per team. **The cheapest RAM is the RAM you don't fill twice.**
+
 **Shared repository context for your team's AI tools.**
 
 Itara is a self-hosted gateway that speaks the OpenAI API. Ingest your team's code and docs once, and every teammate's chat app, script or coding agent gets that context with each request, scoped to the team by Postgres row-level security. An open model on your own GPU (anything vLLM or Ollama serves) builds the memory and can answer on its own. **Muse Spark** answers what it can't.
@@ -144,7 +148,7 @@ Glimmer drafts best, but it reasons before it answers, which makes its fast mode
 
 ## The dashboard
 
-The gateway serves a dashboard at `/dashboard` (`uv run itara dashboard`; it asks for an admin key). **Live** shows each person, their team's memory and cache, and the models every team shares. Each request lights up the path it took: green when the open model answered, violet when it went to Muse. It also shows questions kept local, the share of prompts served from the team cache, and spend against the cap. **Results** shows the benchmarks behind the numbers above. The built files are committed, so Itara runs without Node; to change it, `cd dashboard && npm install && npm run dev`.
+The gateway serves a dashboard at `/dashboard` (`uv run itara dashboard`). It opens on **Demo**, an animated 3D walk through what Itara does and what it measured: press → to step through it. **Live** asks for an admin key and shows each person, their team's memory and cache, and the models every team shares. Each request lights up the path it took: green when the open model answered, violet when it went to Muse. It also shows questions kept local, the share of prompts served from the team cache, and spend against the cap. **Results** shows the benchmarks behind the numbers above. The built files are committed, so Itara runs without Node; to change it, `cd dashboard && npm install && npm run dev`.
 
 ## The research behind it
 

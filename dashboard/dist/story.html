@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itara · shine a light on what your team already has</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d11; --fg: #e9eef3; --muted: #8a97a6; --faint: #4f5a66; --line: rgba(255,255,255,.09);
+    --warm: #ffc871; --green: #2fd17a; --violet: #8f7bff; --red: #ff6b6b; --xray: #9fe6ff;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+    font-family: Inter, ui-sans-serif, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  .vignette { position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,.55) 100%); }
+
+  .chapter { position: fixed; left: clamp(24px, 4vw, 64px); top: clamp(24px, 6vh, 64px); max-width: min(560px, 42vw);
+    transition: opacity .45s ease, transform .45s ease; pointer-events: none; }
+  .chapter.out { opacity: 0; transform: translateY(-8px); }
+  .kicker { font: 500 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--warm); }
+  .chapter h1 { font-weight: 600; font-size: clamp(26px, 2.6vw, 46px); line-height: 1.08; letter-spacing: -.025em; margin: 16px 0 0; }
+  .chapter h1:empty { display: none; }
+  .chapter h1, .kicker { text-shadow: 0 2px 28px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.6); }
+  body.title .chapter { top: auto; bottom: 15vh; max-width: min(820px, 72vw); }
+  body.title .chapter h1 { font-size: clamp(56px, 7vw, 120px); letter-spacing: -.04em; }
+
+  #hero { position: fixed; right: clamp(24px, 4vw, 64px); top: clamp(24px, 6vh, 64px); text-align: right;
+    opacity: 0; transition: opacity .4s ease; pointer-events: none; color: var(--fg); }
+  #hero.on { opacity: 1; }
+  #hero b { display: block; font-size: clamp(56px, 6.5vw, 112px); font-weight: 600; letter-spacing: -.045em; line-height: 1;
+    font-variant-numeric: tabular-nums; text-shadow: 0 2px 28px rgba(0,0,0,.9); }
+  #hero span { display: block; margin-top: 10px; font: 500 13px/1.3 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  #hero svg { display: none; width: clamp(110px, 10vw, 168px); height: auto; margin: 0 0 14px auto; }
+  #hero.ring svg { display: block; }
+  #hero circle { fill: none; stroke-width: 9; }
+  #hero .track { stroke: rgba(255,255,255,.08); }
+  #hero .arc { stroke: currentColor; stroke-linecap: round; stroke-dasharray: 326.73; stroke-dashoffset: 326.73;
+    transform: rotate(-90deg); transform-origin: 60px 60px; transition: stroke-dashoffset .5s ease; }
+  #hero.warn { color: var(--red); } #hero.good { color: var(--green); } #hero.idle { color: #6b7785; }
+  #hero.idle b { color: var(--fg); }
+
+  #meters { position: fixed; right: clamp(24px, 4vw, 64px); bottom: clamp(72px, 10vh, 110px); width: 300px;
+    display: flex; flex-direction: column; gap: 14px; padding: 6px 20px 18px; border-radius: 14px;
+    background: rgba(10,13,17,.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; transition: opacity .4s ease; pointer-events: none; }
+  #meters.on { opacity: 1; }
+  .meter { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .m-label { font-size: 12.5px; color: var(--muted); }
+  .m-value { font-size: 28px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .meter.warn .m-value { color: var(--red); }
+  .meter.good .m-value { color: var(--green); }
+  .meter.violet .m-value { color: var(--violet); }
+  .meter.warm .m-value { color: var(--warm); }
+  .m-foot { font-size: 11.5px; line-height: 1.45; color: var(--faint); padding-top: 10px; }
+
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .tag { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: #d3dbe4;
+    padding: 5px 11px 5px 9px; border-radius: 999px; background: rgba(13,17,23,.74); border: 1px solid rgba(255,255,255,.09);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; align-items: center; gap: 7px;
+    opacity: 0; transition: opacity .35s ease; }
+  .tag.on { opacity: 1; }
+  .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #7d8a99; }
+  .tag.green::before { background: var(--green); }
+  .tag.violet::before { background: var(--violet); }
+  .tag.warn::before { background: var(--red); }
+  .tag.warm::before { background: var(--warm); }
+  .tag.xray::before { background: var(--xray); }
+  .tag.num, .tag.plain { padding: 5px 11px; }
+  .tag.num::before, .tag.plain::before, .tag.z::before { display: none; }
+  .tag.num { font-size: 18px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .tag.num.big { font-size: 26px; }
+  .tag.num.green { color: var(--green); } .tag.num.warn { color: var(--red); } .tag.num.warm { color: var(--warm); }
+  .tag.num.xray { color: var(--xray); } .tag.num.violet { color: var(--violet); }
+  .tag.z { background: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; font-style: italic; font-weight: 600; color: #8a97a6; }
+
+  nav.dots { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; gap: 26px; align-items: flex-end; }
+  nav.dots .sec { display: flex; flex-direction: column; gap: 8px; }
+  nav.dots .sec i { font: 500 10px/1 var(--mono); font-style: normal; letter-spacing: .08em; color: var(--faint); white-space: nowrap; }
+  nav.dots .sec.on i { color: #9aa6b3; }
+  nav.dots .row { display: flex; gap: 6px; }
+  nav.dots button { width: 16px; height: 3px; border: 0; padding: 0; border-radius: 2px; cursor: pointer;
+    background: rgba(255,255,255,.14); transition: background .3s, width .3s; }
+  nav.dots button.on { background: var(--warm); width: 30px; }
+  .hint { position: fixed; left: clamp(24px, 4vw, 64px); bottom: 64px; font: 500 11px/1 var(--mono); color: var(--faint); letter-spacing: .06em; }
+  .hint b { color: #7a8693; font-weight: 500; }
+  body.clean nav.dots, body.clean .hint { display: none; }
+  @media (max-width: 1100px) { .hint { display: none; } }
+
+  .boot { position: fixed; inset: 0; display: grid; place-items: center; font: 500 12px var(--mono); color: var(--faint); }
+</style>
+  <script type="module" crossorigin src="/dashboard/assets/story-CDx5cPkX.js"></script>
+  <link rel="modulepreload" crossorigin href="/dashboard/assets/modulepreload-polyfill-B5Qt9EMX.js">
+</head>
+<body>
+<div class="boot" id="boot">loading</div>
+<canvas id="stage" aria-label="Animated 3D explanation of Itara"></canvas>
+<div class="vignette"></div>
+<div id="labels"></div>
+<header class="chapter" id="chapter"><div class="kicker"></div><h1></h1></header>
+<div id="hero"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="arc" cx="60" cy="60" r="52"/></svg><b></b><span></span></div>
+<aside id="meters"></aside>
+<nav class="dots" id="dots"></nav>
+<div class="hint"><b>← →</b> scenes &nbsp; <b>1–4</b> sections &nbsp; <b>A</b> autoplay &nbsp; <b>R</b> replay &nbsp; <b>H</b> hide bar &nbsp; <b>F</b> full screen</div>
+
+</body>
+</html>
